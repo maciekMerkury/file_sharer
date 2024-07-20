@@ -12,14 +12,7 @@
 #include <pwd.h>
 #include <sys/socket.h>
 
-#define ERR(source)                                                      \
-	(perror(source), fprintf(stderr, "%s:%d\n", __FILE__, __LINE__), \
-	 exit(EXIT_FAILURE))
-
-typedef struct file_data {
-	off_t size;
-	char name[NAME_MAX + 1];
-} file_data;
+#include "core.h"
 
 int setup(uint16_t port)
 {
@@ -61,9 +54,9 @@ int accept_client(int sock)
 	return client;
 }
 
-bool confirm_transfer(int client, file_data *data)
+bool confirm_transfer(int client, file_data_t *data)
 {
-	if (recv(client, data, sizeof(file_data), 0) < 0)
+	if (recv(client, data, sizeof(file_data_t), 0) < 0)
 		ERR("recv");
 
 	char sizes[4][3] = { "B\0", "kB", "MB", "TB" };
@@ -84,7 +77,7 @@ bool confirm_transfer(int client, file_data *data)
 	return c == 'Y' || c == 'y' || c == '\n';
 }
 
-void receiveFile(int client, file_data data)
+void receive_file(int client, file_data_t data)
 {
 	send(client, "start", 6, 0);
 	printf("receiving file...\n");
@@ -142,7 +135,7 @@ int main(int argc, char *argv[])
 
 	while (true) {
 		int client = accept_client(sock);
-		file_data data;
+		file_data_t data;
 		bool result = confirm_transfer(client, &data);
 
 		if (!result) {
@@ -150,7 +143,7 @@ int main(int argc, char *argv[])
 			continue;
 		}
 
-		receiveFile(client, data);
+		receive_file(client, data);
 		disconnect_client(client);
 	}
 

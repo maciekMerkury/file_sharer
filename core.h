@@ -9,3 +9,7 @@ typedef struct file_data {
 } file_data_t;
 
 int read_file_data(file_data_t *dst, const char *const path);
+
+#define ERR(source)                                                      \
+	(perror(source), fprintf(stderr, "%s:%d\n", __FILE__, __LINE__), \
+	 exit(EXIT_FAILURE))

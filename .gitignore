@@ -1,4 +1,5 @@
-main
+client
+server
 *.o
 *.tar.gz
 *.img
