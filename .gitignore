@@ -1,0 +1,9 @@
+main
+*.o
+*.tar.gz
+*.img
+kvstore
+*.swp
+*.dat
+.cache/*
+__pycache__/**/*
