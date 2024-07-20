@@ -1,34 +1,38 @@
-#include <netinet/in.h>
-#include <sys/mman.h>
-#include <fcntl.h>
-#include <stdint.h>
-#include <stdio.h>
+#include "core.h"
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
 #include <arpa/inet.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <sys/mman.h>
 #include <unistd.h>
-
-#include <err.h>
-
-#include "core.h"
 
 #define DEFAULT_PORT 2137
 
-ssize_t send_all(const void *const buf, size_t len, int soc)
+int open_and_map_file(void **file, int *fd, file_data_t *file_data, const char *path)
 {
-	size_t sent = 0;
-
-	while (sent < len) {
-		const ssize_t s = send(soc, (void *)((uintptr_t)buf + sent),
-				       len - sent, 0);
-		if (s < 0)
-			return s;
-
-		sent += s;
+	if ((*fd = open(path, O_RDONLY)) < 0) {
+        perror("file open");
+        return -1;
 	}
 
-	return sent;
+    if (read_file_data_from_fd(file_data, path, *fd) < 0) {
+        goto fd_cleanup;
+    }
+
+	*file = mmap(NULL, file_data->size, PROT_READ,
+			  MAP_FILE | MAP_SHARED, *fd, 0);
+
+    if (*file == MAP_FAILED) {
+        perror("mmap");
+        goto fd_cleanup;
+    }
+
+    return 0;
+
+fd_cleanup:
+    close(*fd);
+    return -1;
 }
 
 int server_connect(char *ip_str)
@@ -61,9 +65,9 @@ int server_connect(char *ip_str)
 	return soc;
 }
 
-int handshake(int soc, file_data_t *file_info)
+int send_init_data(int soc, file_data_t *file_data)
 {
-	send_all(file_info, sizeof(file_data_t), soc);
+	send_all(file_data, sizeof(file_data_t), soc);
 
 	char buf[16] = { 0 };
 	if (recv(soc, buf, 16, 0) < 1) {
@@ -80,44 +84,47 @@ int handshake(int soc, file_data_t *file_info)
 
 int main(int argc, char **argv)
 {
-	int ret = 0;
-	if (argc < 3) {
-		fprintf(stderr, "argc < 3\n");
-		return EXIT_FAILURE;
-	}
+    int ret = EXIT_SUCCESS;
+    if (argc < 3) {
+        fprintf(stderr, "USAGE: %s IP FILEPATH", argv[0]);
+        return EXIT_FAILURE;
+    }
 
-	file_data_t file_info;
-	if ((ret = read_file_data(&file_info, argv[2])) < 0) {
-		perror("read file data");
-		return EXIT_FAILURE;
-	}
+    file_data_t file_data;
+    int file_fd;
+    void *file;
 
-	int soc = server_connect(argv[1]);
-	if (soc < 0)
-		return EXIT_FAILURE;
+    if (open_and_map_file(&file, &file_fd, &file_data, argv[2]) < 0)
+        return EXIT_FAILURE;
 
-	printf("name: %s, size %ld\n", file_info.name, file_info.size);
+    int soc = server_connect(argv[1]);
+    if (soc < 0) {
+        ret = EXIT_FAILURE;
+        goto file_cleanup;
+    }
 
-	if (handshake(soc, &file_info) < 0) {
-        fprintf(stderr, "could not receive data from the server\n");
-        ret = 1;
+    file_size_t size = bytes_to_size(file_data.size);
+    printf("sending %s, size %lf%s\n", file_data.name, size.size, file_size_units[size.unit_idx]);
+
+    if (send_init_data(soc, &file_data) < 0) {
+        fprintf(stderr, "could not send data to the server\n");
+        ret = EXIT_FAILURE;
         goto soc_cleanup;
     }
 
-	int fd;
-	if ((fd = open(argv[2], O_RDONLY)) < 0) {
-		perror("open");
-		goto soc_cleanup;
-	}
+    if (send_all(file, file_data.size, soc) < 0) {
+        perror("sending file");
+        ret = EXIT_FAILURE;
+        goto soc_cleanup;
+    }
 
-	void *file = mmap(NULL, file_info.size, PROT_READ,
-			  MAP_FILE | MAP_SHARED, fd, 0);
-
-	send_all(file, file_info.size, soc);
-	munmap(file, file_info.size);
-
-	close(fd);
 soc_cleanup:
-	close(soc);
-	return ret;
+    close(soc);
+
+file_cleanup:
+    close(file_fd);
+    munmap(file, file_data.size);
+
+    return ret;
 }
+
