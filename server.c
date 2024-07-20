@@ -59,16 +59,10 @@ bool confirm_transfer(int client, file_data_t *data)
 	if (recv(client, data, sizeof(file_data_t), 0) < 0)
 		ERR("recv");
 
-	char sizes[4][3] = { "B\0", "kB", "MB", "TB" };
-	int idx = 0;
-	float filesize = data->size;
-	while (filesize >= 1024.0f) {
-		idx++;
-		filesize /= 1024.0f;
-	}
+    file_size_t size = bytes_to_size(data->size);
 
 	printf("Do you want to receive a file %.255s of %.2f %s [n/Y] ",
-	       data->name, filesize, sizes[idx]);
+	       data->name, size.size, file_size_units[size.unit_idx]);
 
 	char s[2];
 	fgets(s, 2, stdin);
