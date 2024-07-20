@@ -1,5 +1,6 @@
 SRC=$(wildcard *.c)
 HDR=$(wildcard *.h)
+
 CFLAGS=-std=gnu17 -Werror -Wall -Og
 
 main: $(SRC)
