@@ -1,4 +1,5 @@
 SRC=$(wildcard *.c)
+HDR=$(wildcard *.h)
 CFLAGS=-std=c17 -Werror -Wall -Og
 
 main: $(SRC)
@@ -11,6 +12,6 @@ clean:
 	rm -f *.o main
 
 format: 
-	clang-format -i $(SOURCES) $(HEADERS)
+	clang-format -i $(SRC) $(HDR)
 
 
