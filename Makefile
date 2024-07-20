@@ -1,5 +1,4 @@
-SRC=$(wildcard *.c)
-HDR=$(wildcard *.h)
+ALL_FILES=$(wildcard *.[c|h])
 CFLAGS=-std=gnu17 -Werror -Wall -Og
 COMMON=core.o
 
@@ -15,6 +14,5 @@ clean:
 	rm -f *.o client server
 
 format: 
-	clang-format -i $(SRC) $(HDR)
-
+	clang-format -i $(ALL_FILES)
 
