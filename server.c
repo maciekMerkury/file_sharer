@@ -61,7 +61,7 @@ bool confirm_transfer(int client, file_data_t *data)
 
     file_size_t size = bytes_to_size(data->size);
 
-	printf("Do you want to receive a file %.255s of %.2f %s [n/Y] ",
+	printf("Do you want to receive a file %.255s of %.2lf %s [n/Y] ",
 	       data->name, size.size, file_size_units[size.unit_idx]);
 
 	char s[2];

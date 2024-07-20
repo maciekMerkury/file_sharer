@@ -104,7 +104,7 @@ int main(int argc, char **argv)
     }
 
     file_size_t size = bytes_to_size(file_data.size);
-    printf("sending %s, size %lf%s\n", file_data.name, size.size, file_size_units[size.unit_idx]);
+    printf("sending %s, size %.2lf%s\n", file_data.name, size.size, file_size_units[size.unit_idx]);
 
     if (send_init_data(soc, &file_data) < 0) {
         fprintf(stderr, "could not send data to the server\n");
