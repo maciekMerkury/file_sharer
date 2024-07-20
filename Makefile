@@ -1,5 +1,6 @@
 SRC=$(wildcard *.c)
-CFLAGS=-std=c17 -Werror -Wall -Og
+HDR=$(wildcard *.h)
+CFLAGS=-std=gnu17 -Werror -Wall -Og
 
 main: $(SRC)
 	gcc -o $@ $^ $(CFLAGS) $(LIBS)
@@ -11,6 +12,6 @@ clean:
 	rm -f *.o main
 
 format: 
-	clang-format -i $(SOURCES) $(HEADERS)
+	clang-format -i $(SRC) $(HDR)
 
 
