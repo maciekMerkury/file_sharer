@@ -19,7 +19,7 @@ int read_file_data(file_data_t *dst, const char *path)
 	struct stat f_stat;
 	int ret;
 	if ((ret = stat(path, &f_stat)) < 0)
-        return ret;
+		return ret;
 	dst->size = f_stat.st_size;
 
 	return 0;

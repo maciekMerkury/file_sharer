@@ -9,23 +9,26 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
+#include <err.h>
+
 #include "core.h"
 
 #define DEFAULT_PORT 2137
 
 ssize_t send_all(const void *const buf, size_t len, int soc)
 {
-    size_t sent = 0;
+	size_t sent = 0;
 
-    while (sent < len) {
-        const ssize_t s = send(soc, (void*)((uintptr_t)buf + sent), len - sent, 0);
-        if (s < 0)
-            return s;
+	while (sent < len) {
+		const ssize_t s = send(soc, (void *)((uintptr_t)buf + sent),
+				       len - sent, 0);
+		if (s < 0)
+			return s;
 
-        sent += s;
-    }
+		sent += s;
+	}
 
-    return sent;
+	return sent;
 }
 
 int server_connect(char *ip_str)
@@ -34,11 +37,12 @@ int server_connect(char *ip_str)
 	struct in_addr target_ip;
 	if ((ret = inet_pton(AF_INET, ip_str, &target_ip)) < 1) {
 		fprintf(stderr, "wrong ip: %s\n", ip_str);
+		return -1;
 	}
 
 	int soc;
 	if ((soc = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-        perror("socket");
+		perror("socket");
 		return -1;
 	}
 
@@ -57,6 +61,23 @@ int server_connect(char *ip_str)
 	return soc;
 }
 
+int handshake(int soc, file_data_t *file_info)
+{
+	send_all(file_info, sizeof(file_data_t), soc);
+
+	char buf[16] = { 0 };
+	if (recv(soc, buf, 16, 0) < 1) {
+		return -1;
+	}
+
+	if (strcmp(buf, "start") != 0) {
+		fprintf(stderr, "wrong string received: %s\n", buf);
+		return -1;
+	}
+
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
 	int ret = 0;
@@ -67,44 +88,36 @@ int main(int argc, char **argv)
 
 	file_data_t file_info;
 	if ((ret = read_file_data(&file_info, argv[2])) < 0) {
-        perror("read file data");
+		perror("read file data");
 		return EXIT_FAILURE;
-    }
+	}
 
 	int soc = server_connect(argv[1]);
 	if (soc < 0)
 		return EXIT_FAILURE;
 
-    printf("name: %s, size %ld\n", file_info.name, file_info.size);
-    send_all(&file_info, sizeof(file_data_t), soc);
+	printf("name: %s, size %ld\n", file_info.name, file_info.size);
 
-    char buf[16] = { 0 };
-    if ((ret = recv(soc, buf, 16, 0)) < 1) {
-        fprintf(stderr, "recv 2 len is %i\n", ret);
-        ret = EXIT_FAILURE;
+	if (handshake(soc, &file_info) < 0) {
+        fprintf(stderr, "could not receive data from the server\n");
+        ret = 1;
         goto soc_cleanup;
     }
 
-    if (strcmp(buf, "start") != 0) {
-        fprintf(stderr, "wrong string received: %s\n", buf);
-        ret = EXIT_FAILURE;
-        goto soc_cleanup;
-    }
+	int fd;
+	if ((fd = open(argv[2], O_RDONLY)) < 0) {
+		perror("open");
+		goto soc_cleanup;
+	}
 
-    int fd;
-    if ((fd = open(argv[2], O_RDONLY)) < 0) {
-        perror("open");
-        goto soc_cleanup;
-    }
+	void *file = mmap(NULL, file_info.size, PROT_READ,
+			  MAP_FILE | MAP_SHARED, fd, 0);
 
-    void *file = mmap(NULL, file_info.size, PROT_READ, MAP_FILE | MAP_SHARED, fd, 0);
+	send_all(file, file_info.size, soc);
+	munmap(file, file_info.size);
 
-    send_all(file, file_info.size, soc);
-    munmap(file, file_info.size);
-
-    close(fd);
+	close(fd);
 soc_cleanup:
 	close(soc);
 	return ret;
 }
-
