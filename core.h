@@ -11,7 +11,7 @@ typedef struct file_data {
 int read_file_data(file_data_t *dst, const char *const path);
 int read_file_data_from_fd(file_data_t *dst, const char *const path, int fd);
 
-static const char file_size_units[4][4]= { "B\0", "kiB", "MiB", "TiB" };
+static const char file_size_units[4][4]= { "B", "kiB", "MiB", "GiB" };
 typedef struct file_size {
     double size;
     unsigned int unit_idx;
