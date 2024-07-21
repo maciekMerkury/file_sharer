@@ -14,6 +14,11 @@
 
 #include "core.h"
 
+typedef struct client {
+	int socket;
+	char addr_str[INET_ADDRSTRLEN];
+} client_t;
+
 int setup(uint16_t port)
 {
 	int sock = socket(PF_INET, SOCK_STREAM, 0);
@@ -37,56 +42,64 @@ int setup(uint16_t port)
 	return sock;
 }
 
-int accept_client(int sock)
+void accept_client(int sock, client_t *client)
 {
 	printf("Waiting for a new client\n");
-	int client;
+
 	struct sockaddr_in addr;
 	socklen_t len = sizeof(addr);
-	if ((client = accept(sock, (struct sockaddr *)&addr, &len)) < 0)
+	if ((client->socket = accept(sock, (struct sockaddr *)&addr, &len)) < 0)
 		ERR("accept");
 
-	char ip_str[INET_ADDRSTRLEN];
-	if (!inet_ntop(AF_INET, &(addr.sin_addr), ip_str, INET_ADDRSTRLEN))
+	if (!inet_ntop(AF_INET, &(addr.sin_addr), client->addr_str,
+		       INET_ADDRSTRLEN))
 		ERR("inet_ntop");
 
-	printf("client from address %s has connected\n", ip_str);
-	return client;
+	printf("client from address %s has connected\n", client->addr_str);
 }
 
-bool confirm_transfer(int client, file_data_t *data)
+bool confirm_transfer(client_t *client, file_data_t *data, char path[PATH_MAX])
 {
-	if (recv(client, data, sizeof(file_data_t), 0) < 0)
+	if (recv(client->socket, data, sizeof(file_data_t), 0) < 0)
 		ERR("recv");
 
-    file_size_t size = bytes_to_size(data->size);
+	file_size_t size = bytes_to_size(data->size);
 
-	printf("Do you want to receive a file %.255s of %.2lf %s [n/Y] ",
-	       data->name, size.size, file_size_units[size.unit_idx]);
+	printf("Host %s wants to send you file `%.255s` of size %.2f %s\n",
+	       client->addr_str, data->name, size.size,
+	       file_size_units[size.unit_idx]);
 
-	char s[2];
-	fgets(s, 2, stdin);
-	char c = s[0];
+	printf("Specify a download directory (Ctrl+D to refuse transfer): ");
 
-	return c == 'Y' || c == 'y' || c == '\n';
+	char buf[PATH_MAX + 1];
+	char *ret = fgets(buf, PATH_MAX + 1, stdin);
+
+	if (ret == NULL) {
+		clearerr(stdin);
+		printf("\n");
+		return false;
+	}
+
+	char *newl = strchr(buf, '\n');
+	if (newl)
+		*newl = '\0';
+
+	expand_bash_path(path, buf);
+
+	strcat(path, data->name);
+
+	return true;
 }
 
-void receive_file(int client, file_data_t data)
+void receive_file(client_t *client, file_data_t data, char path[PATH_MAX])
 {
-	send(client, "start", 6, 0);
+	send(client->socket, "start", 6, 0);
 	printf("receiving file...\n");
 
 	off_t size = data.size;
 
-	struct passwd *pw = getpwuid(getuid());
-
-	char file_path[PATH_MAX + 1];
-	snprintf(file_path, PATH_MAX + 1, "%s/Downloads/%s", pw->pw_dir,
-		 data.name);
-
 	int fd;
-	if ((fd = open(file_path, O_RDWR | O_CREAT | O_APPEND | O_EXCL, 0644)) <
-	    0)
+	if ((fd = open(path, O_RDWR | O_CREAT | O_APPEND | O_EXCL, 0644)) < 0)
 		ERR("open");
 	if (ftruncate(fd, size) < 0)
 		ERR("ftruncate");
@@ -98,7 +111,7 @@ void receive_file(int client, file_data_t data)
 
 	ssize_t recv_size;
 	while (size > 0) {
-		if ((recv_size = recv(client, file, size, 0)) < 0)
+		if ((recv_size = recv(client->socket, file, size, 0)) < 0)
 			ERR("recv");
 		size -= recv_size;
 		file += recv_size;
@@ -106,10 +119,10 @@ void receive_file(int client, file_data_t data)
 	printf("Done receiving file\n");
 }
 
-void disconnect_client(int client)
+void disconnect_client(client_t *client)
 {
-	close(client);
-	printf("Disconnected the client\n");
+	close(client->socket);
+	printf("Disconnected client %s\n", client->addr_str);
 }
 
 void usage(char *prog)
@@ -127,18 +140,21 @@ int main(int argc, char *argv[])
 
 	int sock = setup(port);
 
+	client_t client;
+	file_data_t data;
+	char path[PATH_MAX];
+
 	while (true) {
-		int client = accept_client(sock);
-		file_data_t data;
-		bool result = confirm_transfer(client, &data);
+		accept_client(sock, &client);
+		bool result = confirm_transfer(&client, &data, path);
 
 		if (!result) {
-			disconnect_client(client);
+			disconnect_client(&client);
 			continue;
 		}
 
-		receive_file(client, data);
-		disconnect_client(client);
+		receive_file(&client, data, path);
+		disconnect_client(&client);
 	}
 
 	close(sock);

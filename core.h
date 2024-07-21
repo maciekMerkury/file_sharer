@@ -10,6 +10,11 @@ typedef struct file_data {
 
 int read_file_data(file_data_t *dst, const char *const path);
 int read_file_data_from_fd(file_data_t *dst, const char *const path, int fd);
+/*
+ * bash_path has to be null-terminated
+ * path is a null-terminated string ending with '/'
+ */
+void expand_bash_path(char path[PATH_MAX], const char bash_path[PATH_MAX]);
 
 static const char file_size_units[4][4]= { "B\0", "kiB", "MiB", "TiB" };
 typedef struct file_size {
