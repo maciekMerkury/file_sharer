@@ -67,7 +67,7 @@ int server_connect(char *ip_str)
 
 int send_init_data(int soc, file_data_t *file_data)
 {
-	send_all(file_data, sizeof(file_data_t), soc);
+	send_all(file_data, sizeof(file_data_t), soc, false);
 
 	char buf[16] = { 0 };
 	if (recv(soc, buf, 16, 0) < 1) {
@@ -112,11 +112,13 @@ int main(int argc, char **argv)
         goto soc_cleanup;
     }
 
-    if (send_all(file, file_data.size, soc) < 0) {
+    printf("sending: ");
+    if (send_all(file, file_data.size, soc, true) < 0) {
         perror("sending file");
         ret = EXIT_FAILURE;
         goto soc_cleanup;
     }
+    printf("\n");
 
 soc_cleanup:
     close(soc);
