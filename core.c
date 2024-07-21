@@ -1,11 +1,14 @@
 // the gnu version of the basename function is needed
 #define _GNU_SOURCE
 
+#include <errno.h>
+#include <math.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/stat.h>
 #include <sys/socket.h>
-#include <stdint.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "core.h"
 
@@ -65,20 +68,50 @@ file_size_t bytes_to_size(size_t byte_size)
     };
 }
 
-ssize_t send_all(const void *const buf, size_t len, int soc)
+ssize_t send_all(const void *const buf, size_t len, int soc, bool disp_prog)
 {
 	size_t sent = 0;
+    if (disp_prog)
+        display_progress(sent, len);
 
-	while (sent < len) {
-		const ssize_t s = send(soc, (void *)((uintptr_t)buf + sent),
-				       len - sent, 0);
-		if (s < 0)
-			return s;
+    ssize_t s;
+    while (sent < len) {
+		s = send(soc, (void *)((uintptr_t)buf + sent),
+				       len - sent, MSG_DONTWAIT);
+		if (s < 0) {
+            if (errno != EWOULDBLOCK)
+                return s;
+
+            s = 0;
+        }
 
 		sent += s;
+
+        if (disp_prog)
+            display_progress(sent, len);
 	}
 
 	return sent;
 }
 
+void display_progress(const size_t curr, const size_t max) 
+{
+    for (int i = 0; i < 18; ++i) {
+        putchar('\b');
+    }
 
+    double state = (double)curr / max;
+
+    unsigned done = round(state * 10.0);
+
+    unsigned i;
+    for (i = 0; i < done; ++i) {
+        putchar('#');
+    }
+    for (; i < 10; ++i) {
+        putchar(' ');
+    }
+    printf(" (%04.1lf%%)", state * 100.0);
+    fflush(stdout);
+}
+ 

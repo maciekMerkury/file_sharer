@@ -1,6 +1,7 @@
 #pragma once
 
 #include <linux/limits.h>
+#include <stdbool.h>
 #include <sys/types.h>
 
 typedef struct file_data {
@@ -19,7 +20,8 @@ typedef struct file_size {
 
 file_size_t bytes_to_size(size_t size);
 
-ssize_t send_all(const void *const buf, size_t len, int soc);
+ssize_t send_all(const void *const buf, size_t len, int soc, bool disp_prog);
+void display_progress(const size_t curr, const size_t max);
 
 #define ERR(source)                                                     \
 	(perror(source), fprintf(stderr, "%s:%d\n", __FILE__, __LINE__),    \
