@@ -65,7 +65,7 @@ bool confirm_transfer(client_t *client, file_data_t *data, char path[PATH_MAX])
 
 	file_size_t size = bytes_to_size(data->size);
 
-	printf("Host %s wants to send you file `%.255s` of size %.2f %s\n",
+	printf("Host %s wants to send you file `%.255s` of size %.2lf %s\n",
 	       client->addr_str, data->name, size.size,
 	       file_size_units[size.unit_idx]);
 
@@ -93,35 +93,47 @@ bool confirm_transfer(client_t *client, file_data_t *data, char path[PATH_MAX])
 
 void receive_file(client_t *client, file_data_t data, char path[PATH_MAX])
 {
-	send(client->socket, "start", 6, 0);
-	printf("receiving file...\n");
+	if (send(client->socket, start_transfer_message,
+		 strlen(start_transfer_message) + 1, 0) < 0)
+		ERR("send");
 
-	off_t size = data.size;
+	printf("receiving file...\n");
 
 	int fd;
 	if ((fd = open(path, O_RDWR | O_CREAT | O_APPEND | O_EXCL, 0644)) < 0)
 		ERR("open");
-	if (ftruncate(fd, size) < 0)
+	if (ftruncate(fd, data.size) < 0)
 		ERR("ftruncate");
 
 	void *file;
-	if ((file = mmap(NULL, size, PROT_WRITE, MAP_FILE | MAP_SHARED, fd,
+	if ((file = mmap(NULL, data.size, PROT_WRITE, MAP_FILE | MAP_SHARED, fd,
 			 0)) == MAP_FAILED)
 		ERR("mmap");
 
+	size_t total_received = 0;
 	ssize_t recv_size;
-	while (size > 0) {
-		if ((recv_size = recv(client->socket, file, size, 0)) < 0)
+
+	display_progress(total_received, data.size);
+	while (total_received < data.size) {
+		if ((recv_size = recv(client->socket, file + total_received,
+				      (data.size - total_received), 0)) < 0)
 			ERR("recv");
-		size -= recv_size;
-		file += recv_size;
+		total_received += recv_size;
+		display_progress(total_received, data.size);
 	}
-	printf("Done receiving file\n");
+	printf("\nDone receiving file\n");
+
+	if (munmap(file, data.size) < 0)
+		ERR("munmap");
+	if (close(fd) < 0)
+		ERR("close");
 }
 
 void disconnect_client(client_t *client)
 {
-	close(client->socket);
+	if (close(client->socket) < 0)
+		ERR("close");
+
 	printf("Disconnected client %s\n", client->addr_str);
 }
 

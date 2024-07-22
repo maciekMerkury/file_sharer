@@ -2,6 +2,7 @@
 
 #include <linux/limits.h>
 #include <stdbool.h>
+#include <stdlib.h>
 #include <sys/types.h>
 
 typedef struct file_data {
@@ -17,7 +18,8 @@ int read_file_data_from_fd(file_data_t *dst, const char *const path, int fd);
  */
 void expand_bash_path(char path[PATH_MAX], const char bash_path[PATH_MAX]);
 
-static const char file_size_units[4][4]= { "B", "kiB", "MiB", "GiB" };
+static const char start_transfer_message[] = "start";
+static const char file_size_units[4][4] = { "B", "kiB", "MiB", "GiB" };
 typedef struct file_size {
     double size;
     unsigned int unit_idx;

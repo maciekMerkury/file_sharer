@@ -69,12 +69,16 @@ int send_init_data(int soc, file_data_t *file_data)
 {
 	send_all(file_data, sizeof(file_data_t), soc, false);
 
-	char buf[16] = { 0 };
-	if (recv(soc, buf, 16, 0) < 1) {
+	char buf[sizeof(start_transfer_message)];
+
+    size_t read;
+	if ((read = recv(soc, buf, sizeof(buf), 0)) < 1) {
 		return -1;
 	}
 
-	if (strcmp(buf, "start") != 0) {
+    buf[read - (read == sizeof(buf))] = '\0';
+
+	if (strcmp(buf, start_transfer_message)) {
 		fprintf(stderr, "wrong string received: %s\n", buf);
 		return -1;
 	}
