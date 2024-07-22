@@ -1,5 +1,6 @@
 #pragma once
 
+#include "progress_bar.h"
 #include <linux/limits.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -27,7 +28,7 @@ typedef struct file_size {
 
 file_size_t bytes_to_size(size_t size);
 
-ssize_t send_all(const void *const buf, size_t len, int soc, bool disp_prog);
+ssize_t send_all(const void *const buf, size_t len, int soc, progress_bar_t *prog_bar);
 void display_progress(const size_t curr, const size_t max);
 
 #define ERR(source)                                                     \

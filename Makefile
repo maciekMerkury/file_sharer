@@ -1,6 +1,6 @@
 ALL_FILES=$(wildcard *.[c|h])
 CFLAGS=-std=gnu17 -Werror -Wall -Og
-COMMON=core.o
+COMMON=core.o progress_bar.o
 LDLIBS=-lm
 
 all: server client

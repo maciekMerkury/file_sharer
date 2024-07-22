@@ -1,5 +1,6 @@
 // the gnu version of the basename function is needed
 #define _GNU_SOURCE
+#include "progress_bar.h"
 
 #include <fcntl.h>
 #include <errno.h>
@@ -74,17 +75,17 @@ file_size_t bytes_to_size(size_t byte_size)
 	};
 }
 
-ssize_t send_all(const void *const buf, size_t len, int soc, const bool disp_prog)
+ssize_t send_all(const void *const buf, size_t len, int soc, progress_bar_t *const prog_bar)
 {
 	ssize_t sent = 0;
     int old_flags = 0;
-	if (disp_prog) {
+	if (prog_bar) {
         old_flags = fcntl(soc, F_GETFL, 0);
         if (fcntl(soc, F_SETFL, old_flags | O_NONBLOCK) < 0) {
             perror("fcntl");
             return -1;
         }
-		display_progress(sent, len);
+		prog_bar_start(prog_bar);
     }
 
 	ssize_t s;
@@ -101,15 +102,16 @@ ssize_t send_all(const void *const buf, size_t len, int soc, const bool disp_pro
 
 		sent += s;
 
-		if (disp_prog)
-			display_progress(sent, len);
+        if (prog_bar)
+            prog_bar_advance(prog_bar, sent);
 	}
 
-    if (disp_prog) {
+    if (prog_bar) {
         if (fcntl(soc, F_SETFL, old_flags) < 0) {
             perror("fcntl");
             return -1;
         }
+        prog_bar_finish(prog_bar);
     }
 
 	return sent;

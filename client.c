@@ -1,4 +1,5 @@
 #include "core.h"
+#include "progress_bar.h"
 #include <stdlib.h>
 #include <string.h>
 #include <arpa/inet.h>
@@ -67,7 +68,7 @@ int server_connect(char *ip_str)
 
 int send_init_data(int soc, file_data_t *file_data)
 {
-	send_all(file_data, sizeof(file_data_t), soc, false);
+	send_all(file_data, sizeof(file_data_t), soc, NULL);
 
 	char buf[sizeof(start_transfer_message)];
 
@@ -116,13 +117,14 @@ int main(int argc, char **argv)
         goto soc_cleanup;
     }
 
-    printf("sending: ");
-    if (send_all(file, file_data.size, soc, true) < 0) {
+    progress_bar_t bar;
+    prog_bar_init(&bar, "sending", file_data.size, (struct timespec) { .tv_nsec = 500e6 });
+
+    if (send_all(file, file_data.size, soc, &bar) < 0) {
         perror("sending file");
         ret = EXIT_FAILURE;
         goto soc_cleanup;
     }
-    printf("\n");
 
 soc_cleanup:
     close(soc);
