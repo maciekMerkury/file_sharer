@@ -64,10 +64,6 @@ bool recv_hello(client_t *client)
 		.events = POLLIN,
 	};
 
-	client->name = malloc(client->name_len);
-	if (client->name == NULL)
-		ERR("malloc");
-
 	if (poll(&p, 1, TIMEOUT) == 0) {
 		fprintf(stderr, "client did not send data within timeout\n");
 		return false;
@@ -92,11 +88,11 @@ bool recv_hello(client_t *client)
 	if (recv(client->socket, client->name, client->name_len, 0) < 0)
 		ERR("recv");
 
-    mt = mt_ack;
-    if (send_all(&mt, sizeof(message_type), client->socket, NULL) < 0)
-        ERR("send_all");
+	mt = mt_ack;
+	if (send_all(&mt, sizeof(message_type), client->socket, NULL) < 0)
+		ERR("send_all");
 
-    return true;
+	return true;
 }
 
 void recv_entry(client_t *client, entry_t *entry)
@@ -141,17 +137,17 @@ bool confirm_transfer(client_t *client, entry_t *entry, char path[PATH_MAX])
 	recv_entry(client, entry);
 
 	size_info size = bytes_to_size(get_entry_size(entry));
-	printf("Do you want to receive %s `%.255s` of size %s"
+	printf("Do you want to receive %s `%.255s` of size %.2lf %s"
 	       " from user %s at host %s [Y/n] ",
-           get_entry_type_name(entry), get_entry_name(entry),
+	       get_entry_type_name(entry), get_entry_name(entry), size.size,
 	       unit(size), client->name, client->addr_str);
-	       
 
 	char *line = NULL;
 	size_t len;
 	if (getline(&line, &len, stdin) < 0)
 		ERR("getline");
 	char c = line[0];
+    free(line);
 
 	return c == 'y' || c == 'Y' || c == '\n';
 }
@@ -190,9 +186,11 @@ void recv_entry_data(client_t *client, entry_t *entry, char path[PATH_MAX])
 		      (struct timespec){ 0, 100000000 });
 
 	while (total_received < get_entry_size(entry)) {
-		if ((recv_size = recv(client->socket, (void*)((uintptr_t)file + total_received),
-				      (get_entry_size(entry) - total_received),
-				      0)) < 0) {
+		if ((recv_size =
+			     recv(client->socket,
+				  (void *)((uintptr_t)file + total_received),
+				  (get_entry_size(entry) - total_received),
+				  0)) < 0) {
 			if (errno != EWOULDBLOCK)
 				ERR("recv");
 		} else {
