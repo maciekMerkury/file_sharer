@@ -198,11 +198,9 @@ static int client_main(in_port_t port, struct in_addr addr, int file_fd,
 	}
 
 	progress_bar_t bar;
-	// TODO: consider concating sending and the file name/path
-	prog_bar_init(&bar, "sending", f.data.size,
+	prog_bar_init(&bar, f.data.name, f.data.size,
 		      (struct timespec){ .tv_nsec = 500e6 });
 
-	//ssize_t l = sendall(server, f.map, f.data.size);
 	ssize_t l = send_all(f.map, f.data.size, server, &bar);
 	assert(l == f.data.size);
 	if (l < 0) {

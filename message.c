@@ -14,6 +14,7 @@ void get_name(hello_data_t *hello)
 	hello->username_len = strlen(hello->username) + 1;
 }
 
+#define ALL_PERMISSIONS (S_IRWXU | S_IRWXG | S_IRWXO)
 int read_file_data(file_data_t *dst, const char *const path)
 {
 	const char *name = basename(path);
@@ -32,6 +33,7 @@ int read_file_data(file_data_t *dst, const char *const path)
 	}
 
 	dst->size = s.st_size;
+    dst->mode = s.st_mode & ALL_PERMISSIONS;
 	return 0;
 }
 

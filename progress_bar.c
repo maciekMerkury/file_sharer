@@ -42,7 +42,6 @@ int print_bar(const progress_bar_t *const bar, const size_t curr,
 		putchar('\b');
 	}
 
-	//putchar('\r');
 	printf("%s: [", bar->title);
 
 	size_t i = 0;

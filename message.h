@@ -13,6 +13,7 @@ typedef enum __attribute__((__packed__)) message_type {
 static const char *const default_user_name = "(???)";
 #define MAX_HELLO_DATA_SIZE \
 	(sizeof(message_type) + sizeof(hello_data_t) + NAME_MAX + 1)
+
 typedef struct hello_data {
 	/* len includes the null byte */
 	size_t username_len;
@@ -31,7 +32,6 @@ typedef struct file_data {
 } file_data_t;
 
 int read_file_data(file_data_t *dst, const char *const path);
-int read_file_data_from_fd(file_data_t *dst, const char *const path, int fd);
 
 typedef struct dir_data {
 	char name[NAME_MAX + 1];
@@ -45,9 +45,4 @@ typedef struct dir_data {
      */
 	off_t total_data_size;
 } dir_data_t;
-
-union message_data {
-    file_data_t file;
-    dir_data_t dir;
-};
 

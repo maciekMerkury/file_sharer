@@ -92,7 +92,11 @@ bool recv_hello(client_t *client)
 	if (recv(client->socket, client->name, client->name_len, 0) < 0)
 		ERR("recv");
 
-	return true;
+    mt = mt_ack;
+    if (send_all(&mt, sizeof(message_type), client->socket, NULL) < 0)
+        ERR("send_all");
+
+    return true;
 }
 
 void recv_entry(client_t *client, entry_t *entry)
