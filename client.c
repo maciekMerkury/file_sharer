@@ -1,11 +1,14 @@
 #include "core.h"
 #include "progress_bar.h"
+#include "message.h"
+#include "size_info.h"
 #include <stdlib.h>
 #include <string.h>
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <sys/mman.h>
+#include <sys/socket.h>
 #include <unistd.h>
 
 #define DEFAULT_PORT 2137
@@ -54,7 +57,7 @@ int server_connect(char *ip_str)
 	struct sockaddr_in addr = { .sin_addr = target_ip,
 				    .sin_family = AF_INET,
 				    .sin_port = htons(DEFAULT_PORT),
-				    .sin_zero = { 0 } };
+				    };
 
 	if ((ret = connect(soc, (const struct sockaddr *)&addr,
 			   sizeof(struct sockaddr_in)) < 0)) {
@@ -68,23 +71,37 @@ int server_connect(char *ip_str)
 
 int send_init_data(int soc, file_data_t *file_data)
 {
-	send_all(file_data, sizeof(file_data_t), soc, NULL);
+    hello_data_t *hello = malloc(sizeof(hello_data_t) + NAME_MAX + 1);
+    hello->username_len = NAME_MAX + 1;
+    get_name(hello);
 
-	char buf[sizeof(start_transfer_message)];
+    int ret;
 
-    size_t read;
-	if ((read = recv(soc, buf, sizeof(buf), 0)) < 1) {
-		return -1;
-	}
+    message_type t = mt_hello;
+    if ((ret = send_all(&t, sizeof(message_type), soc, NULL)) < 0) {
+        perror("send_all hello");
+        goto cleanup;
+    }
 
-    buf[read - (read == sizeof(buf))] = '\0';
+    if ((ret = send_all(hello, sizeof(hello_data_t) + hello->username_len, soc, NULL)) < 0) {
+        perror("sendall init");
+        goto cleanup;
+    }
 
-	if (strcmp(buf, start_transfer_message)) {
-		fprintf(stderr, "wrong string received: %s\n", buf);
-		return -1;
-	}
+    if ((ret = recv(soc, &t, sizeof(message_type), 0)) < 0) {
+        perror("recv");
+        goto cleanup;
+    }
 
-	return 0;
+    if (t != mt_ack) {
+        fprintf(stderr, "wrong resp to init data\n");
+        ret = -1;
+    } else ret = 0;
+
+cleanup:
+    free(hello);
+
+	return ret;
 }
 
 int main(int argc, char **argv)
@@ -108,8 +125,8 @@ int main(int argc, char **argv)
         goto file_cleanup;
     }
 
-    file_size_t size = bytes_to_size(file_data.size);
-    printf("sending %s, size %.2lf%s\n", file_data.name, size.size, file_size_units[size.unit_idx]);
+    size_info size = bytes_to_size(file_data.size);
+    printf("sending %s, size %.2lf%s\n", file_data.name, size.size, unit(size));
 
     if (send_init_data(soc, &file_data) < 0) {
         fprintf(stderr, "could not send data to the server\n");

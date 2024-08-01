@@ -12,7 +12,7 @@ typedef struct progress_bar {
 } progress_bar_t;
 
 void prog_bar_init(progress_bar_t *bar, const char *const title, const size_t max, const struct timespec minimum_dt);
-int prog_bar_start(const progress_bar_t *prog);
+int prog_bar_start(progress_bar_t *prog);
 int prog_bar_advance(progress_bar_t *prog, const size_t curr_val);
 int prog_bar_finish(progress_bar_t *bar);
 

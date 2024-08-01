@@ -1,4 +1,5 @@
 #include <linux/limits.h>
+#include <poll.h>
 #include <unistd.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -12,12 +13,18 @@
 #include <pwd.h>
 #include <sys/socket.h>
 
+#include "message.h"
+#include "size_info.h"
 #include "core.h"
 
 typedef struct client {
 	int socket;
 	char addr_str[INET_ADDRSTRLEN];
+    size_t name_len;
+    char *name;
 } client_t;
+
+#define TIMEOUT 1000
 
 int setup(uint16_t port)
 {
@@ -42,6 +49,20 @@ int setup(uint16_t port)
 	return sock;
 }
 
+void read_name(client_t *client) 
+{
+    if (recv(client->socket, &client->name_len, sizeof(size_t), 0) < 0)
+        ERR("recv");
+
+    printf("%lu\n", client->name_len);
+    client->name = malloc(client->name_len);
+    if (client->name == NULL)
+        ERR("malloc");
+
+    if (recv(client->socket, client->name, client->name_len, 0) < 0)
+        ERR("recv");
+}
+
 void accept_client(int sock, client_t *client)
 {
 	printf("Waiting for a new client\n");
@@ -55,7 +76,28 @@ void accept_client(int sock, client_t *client)
 		       INET_ADDRSTRLEN))
 		ERR("inet_ntop");
 
-	printf("client from address %s has connected\n", client->addr_str);
+    message_type t;
+    struct pollfd p = {
+        .fd = client->socket,
+        .events = POLLIN,
+    };
+
+    if (poll(&p, 1, TIMEOUT) == 0) {
+        fprintf(stderr, "client did not send data within timeout\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (recv(client->socket, &t, sizeof(message_type), 0) < 0)
+        ERR("recv");
+
+    if (t != mt_hello) {
+        fprintf(stderr, "handshake error: %u\n", t);
+        exit(EXIT_FAILURE);
+    }
+
+    read_name(client);
+
+	printf("client %s from address %s has connected\n", client->name, client->addr_str);
 }
 
 bool confirm_transfer(client_t *client, file_data_t *data, char path[PATH_MAX])
@@ -63,11 +105,11 @@ bool confirm_transfer(client_t *client, file_data_t *data, char path[PATH_MAX])
 	if (recv(client->socket, data, sizeof(file_data_t), 0) < 0)
 		ERR("recv");
 
-	file_size_t size = bytes_to_size(data->size);
+	size_info size = bytes_to_size(data->size);
 
 	printf("Host %s wants to send you file `%.255s` of size %.2lf %s\n",
 	       client->addr_str, data->name, size.size,
-	       file_size_units[size.unit_idx]);
+	       unit(size));
 
 	printf("Specify a download directory (Ctrl+D to refuse transfer): ");
 
@@ -93,9 +135,12 @@ bool confirm_transfer(client_t *client, file_data_t *data, char path[PATH_MAX])
 
 void receive_file(client_t *client, file_data_t data, char path[PATH_MAX])
 {
+#pragma message "actually change this part"
+    /*
 	if (send(client->socket, start_transfer_message,
 		 strlen(start_transfer_message) + 1, 0) < 0)
 		ERR("send");
+    */
 
 	printf("receiving file...\n");
 
@@ -110,6 +155,8 @@ void receive_file(client_t *client, file_data_t data, char path[PATH_MAX])
 			 0)) == MAP_FAILED)
 		ERR("mmap");
 
+#pragma message "use the new progress bar"
+    /*
 	size_t total_received = 0;
 	ssize_t recv_size;
 
@@ -121,6 +168,7 @@ void receive_file(client_t *client, file_data_t data, char path[PATH_MAX])
 		total_received += recv_size;
 		display_progress(total_received, data.size);
 	}
+    */
 	printf("\nDone receiving file\n");
 
 	if (munmap(file, data.size) < 0)
