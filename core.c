@@ -1,13 +1,12 @@
 // the gnu version of the basename function is needed
-#include <assert.h>
 #define _GNU_SOURCE
 #include "progress_bar.h"
+#include <assert.h>
 
 #include <fcntl.h>
 #include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <string.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
@@ -15,6 +14,7 @@
 #include <pwd.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "core.h"
 

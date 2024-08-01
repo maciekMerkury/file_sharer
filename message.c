@@ -34,3 +34,4 @@ int read_file_data(file_data_t *dst, const char *const path)
 	dst->size = s.st_size;
 	return 0;
 }
+

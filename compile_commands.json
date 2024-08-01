@@ -82,6 +82,24 @@
       "-pedantic",
       "-c",
       "-o",
+      "entry.o",
+      "entry.c"
+    ],
+    "directory": "/home/maciek/programming/c/file_sharer",
+    "file": "/home/maciek/programming/c/file_sharer/entry.c",
+    "output": "/home/maciek/programming/c/file_sharer/entry.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-std=gnu17",
+      "-Werror",
+      "-Wall",
+      "-Wno-trigraphs",
+      "-O0",
+      "-pedantic",
+      "-c",
+      "-o",
       "server.o",
       "server.c"
     ],

@@ -46,16 +46,8 @@ typedef struct dir_data {
 	off_t total_data_size;
 } dir_data_t;
 
-/*
 union message_data {
-    struct hello_data hello;
-    struct file_data file;
-    struct dir_data dir;
+    file_data_t file;
+    dir_data_t dir;
 };
 
-typedef struct message {
-    message_type type;
-    union message_data data;
-} message;
-
-*/

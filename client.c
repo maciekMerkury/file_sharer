@@ -74,7 +74,7 @@ static int read_file(file *f, int fd, const char *const path)
 		return -1;
 	}
 
-	return 0;
+    return 0;
 }
 
 /* also performs the handshake, etc */
