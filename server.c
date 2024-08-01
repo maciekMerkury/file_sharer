@@ -1,10 +1,11 @@
-#include "progress_bar.h"
 #include <errno.h>
 #include <poll.h>
 #include <linux/limits.h>
 #include <poll.h>
+#include <time.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <errno.h>
 #include <stdbool.h>
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -16,18 +17,18 @@
 #include <pwd.h>
 #include <sys/socket.h>
 
+#include "progress_bar.h"
 #include "message.h"
+#include "entry.h"
 #include "size_info.h"
 #include "core.h"
 
 typedef struct client {
 	int socket;
 	char addr_str[INET_ADDRSTRLEN];
-    size_t name_len;
-    char *name;
+	size_t name_len;
+	char *name;
 } client_t;
-
-#define TIMEOUT 1000
 
 int setup(uint16_t port)
 {
@@ -52,20 +53,62 @@ int setup(uint16_t port)
 	return sock;
 }
 
-void read_name(client_t *client) 
+#define TIMEOUT 1000
+
+bool recv_hello(client_t *client)
 {
-    if (recv(client->socket, &client->name_len, sizeof(size_t), 0) < 0)
-        ERR("recv");
+	struct pollfd p = {
+		.fd = client->socket,
+		.events = POLLIN,
+	};
 
-    client->name = malloc(client->name_len);
-    if (client->name == NULL)
-        ERR("malloc");
+	client->name = malloc(client->name_len);
+	if (client->name == NULL)
+		ERR("malloc");
 
-    if (recv(client->socket, client->name, client->name_len, 0) < 0)
-        ERR("recv");
+	if (poll(&p, 1, TIMEOUT) == 0) {
+		fprintf(stderr, "client did not send data within timeout\n");
+		return false;
+	}
+
+	message_type mt;
+	if (recv(client->socket, &mt, sizeof(message_type), 0) < 0)
+		ERR("recv");
+
+	if (mt != mt_hello) {
+		fprintf(stderr, "handshake error: %u\n", mt);
+		return false;
+	}
+
+	if (recv(client->socket, &client->name_len, sizeof(size_t), 0) < 0)
+		ERR("recv");
+
+	client->name = malloc(client->name_len);
+	if (client->name == NULL)
+		ERR("malloc");
+
+	if (recv(client->socket, client->name, client->name_len, 0) < 0)
+		ERR("recv");
+
+	return true;
 }
 
-void accept_client(int sock, client_t *client)
+void recv_entry(client_t *client, entry_t *entry)
+{
+	message_type mt;
+	if (recv(client->socket, &mt, sizeof(message_type), 0) < 0)
+		ERR("recv");
+
+	size_t msg_size = mt == mt_file ? sizeof(file_data_t) :
+					  sizeof(dir_data_t);
+
+	entry->type = mt == mt_file ? et_file : et_directory;
+
+	if (recv(client->socket, &entry->data, msg_size, 0) < 0)
+		ERR("recv");
+}
+
+bool accept_client(int sock, client_t *client)
 {
 	printf("Waiting for a new client\n");
 
@@ -78,70 +121,50 @@ void accept_client(int sock, client_t *client)
 		       INET_ADDRSTRLEN))
 		ERR("inet_ntop");
 
-    message_type t;
-    struct pollfd p = {
-        .fd = client->socket,
-        .events = POLLIN,
-    };
+	if (!recv_hello(client))
+		return false;
 
-    if (poll(&p, 1, TIMEOUT) == 0) {
-        fprintf(stderr, "client did not send data within timeout\n");
-        exit(EXIT_FAILURE);
-    }
-
-    if (recv(client->socket, &t, sizeof(message_type), 0) < 0)
-        ERR("recv");
-
-    if (t != mt_hello) {
-        fprintf(stderr, "handshake error: %u\n", t);
-        exit(EXIT_FAILURE);
-    }
-
-    read_name(client);
-
-	printf("client %s from address %s has connected\n", client->name, client->addr_str);
-}
-
-bool confirm_transfer(client_t *client, file_data_t *data, char path[PATH_MAX])
-{
-	if (recv(client->socket, data, sizeof(file_data_t), 0) < 0)
-		ERR("recv");
-
-	size_info size = bytes_to_size(data->size);
-
-	printf("Do you want to receive file `%.255s` of size %.2lf %s"
-	       "from host %s? [Y/n] ",
-	       data->name, size.size, unit(size),
+	printf("client %s from address %s has connected\n", client->name,
 	       client->addr_str);
 
-    char *line = NULL;
-    size_t len;
-    if (getline(&line, &len, stdin) < 0)
-        ERR("getline");
-    char c = line[0];
+	return true;
+}
 
-    printf("%s\n", line);
+bool confirm_transfer(client_t *client, entry_t *entry, char path[PATH_MAX])
+{
+	recv_entry(client, entry);
+
+	size_info size = bytes_to_size(get_entry_size(entry));
+	printf("Do you want to receive %s `%.255s` of size %s"
+	       " from user %s at host %s [Y/n] ",
+           get_entry_type_name(entry), get_entry_name(entry),
+	       unit(size), client->name, client->addr_str);
+	       
+
+	char *line = NULL;
+	size_t len;
+	if (getline(&line, &len, stdin) < 0)
+		ERR("getline");
+	char c = line[0];
+
 	return c == 'y' || c == 'Y' || c == '\n';
 }
 
-void receive_file(client_t *client, file_data_t *data, char path[PATH_MAX])
+void recv_entry_data(client_t *client, entry_t *entry, char path[PATH_MAX])
 {
-#pragma message "actually change this part"
-    /*
-	if (send(client->socket, start_transfer_message,
-		 strlen(start_transfer_message) + 1, 0) < 0)
+	message_type mt = mt_ack;
+	if (send(client->socket, &mt, sizeof(message_type), 0) < 0)
 		ERR("send");
-    */
 
 	int fd;
 	if ((fd = open(path, O_RDWR | O_CREAT | O_APPEND | O_EXCL, 0644)) < 0)
 		ERR("open");
-	if (ftruncate(fd, data->size) < 0)
+	if (ftruncate(fd, get_entry_size(entry)) < 0)
 		ERR("ftruncate");
 
 	void *file;
-	if ((file = mmap(NULL, data->size, PROT_WRITE, MAP_FILE | MAP_SHARED,
-			 fd, 0)) == MAP_FAILED)
+	if ((file = mmap(NULL, get_entry_size(entry), PROT_WRITE,
+			 MAP_FILE | MAP_SHARED, fd, 0)) == MAP_FAILED)
 		ERR("mmap");
 
 	size_t total_received = 0;
@@ -157,15 +180,13 @@ void receive_file(client_t *client, file_data_t *data, char path[PATH_MAX])
 	snprintf(title, PATH_MAX, "Receiving %s", path);
 
 	progress_bar_t bar;
-	prog_bar_init(&bar, title, data->size,
+	prog_bar_init(&bar, title, get_entry_size(entry),
 		      (struct timespec){ 0, 100000000 });
 
-	prog_bar_start(&bar);
-	while (total_received < data->size) {
-		if ((recv_size =
-			     recv(client->socket,
-				  (void *)((uintptr_t)file + total_received),
-				  (data->size - total_received), 0)) < 0) {
+	while (total_received < get_entry_size(entry)) {
+		if ((recv_size = recv(client->socket, file + total_received,
+				      (get_entry_size(entry) - total_received),
+				      0)) < 0) {
 			if (errno != EWOULDBLOCK)
 				ERR("recv");
 		} else {
@@ -180,7 +201,7 @@ void receive_file(client_t *client, file_data_t *data, char path[PATH_MAX])
 	if (fcntl(client->socket, F_SETFL, flags) < 0)
 		ERR("fcntl");
 
-	if (munmap(file, data->size) < 0)
+	if (munmap(file, get_entry_size(entry)) < 0)
 		ERR("munmap");
 	if (close(fd) < 0)
 		ERR("close");
@@ -190,6 +211,8 @@ void cleanup_client(client_t *client)
 {
 	if (close(client->socket) < 0)
 		ERR("close");
+
+	free(client->name);
 
 	printf("Disconnected client %s\n", client->addr_str);
 }
@@ -215,19 +238,20 @@ int main(int argc, char *argv[])
 
 	while (true) {
 		client_t client = { 0 };
-		file_data_t data;
+		entry_t entry;
 		char path[PATH_MAX];
 
 		accept_client(sock, &client);
-		if (!confirm_transfer(&client, &data, path)) {
+		if (!confirm_transfer(&client, &entry, path)) {
 			cleanup_client(&client);
 			continue;
 		}
 
 		strcpy(path, downloads_directory);
 		strcat(path, "/");
-		strcat(path, data.name);
-		receive_file(&client, &data, path);
+		strcat(path, get_entry_name(&entry));
+
+		recv_entry_data(&client, &entry, path);
 		cleanup_client(&client);
 	}
 
