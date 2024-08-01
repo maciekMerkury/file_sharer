@@ -1,4 +1,5 @@
 // the gnu version of the basename function is needed
+#include <assert.h>
 #define _GNU_SOURCE
 #include "progress_bar.h"
 
@@ -19,6 +20,7 @@
 
 ssize_t send_all(const void *const buf, size_t len, int soc, progress_bar_t *const prog_bar)
 {
+    printf("len: %lu\n", len);
 	ssize_t sent = 0;
     int old_flags = 0;
 	if (prog_bar) {
@@ -27,6 +29,8 @@ ssize_t send_all(const void *const buf, size_t len, int soc, progress_bar_t *con
             perror("fcntl");
             return -1;
         }
+
+        assert(!(old_flags & O_NONBLOCK));
 		prog_bar_start(prog_bar);
     }
 
@@ -35,14 +39,16 @@ ssize_t send_all(const void *const buf, size_t len, int soc, progress_bar_t *con
 		s = send(soc, (void *)((uintptr_t)buf + sent), len - sent, 0);
 		if (s < 0) {
 			if (errno != EWOULDBLOCK) {
+                perror("send");
                 sent = s;
                 break;
             }
 
 			s = 0;
-		}
+		} else {
+            sent += s;
+        }
 
-		sent += s;
 
         if (prog_bar)
             prog_bar_advance(prog_bar, sent);
@@ -55,6 +61,7 @@ ssize_t send_all(const void *const buf, size_t len, int soc, progress_bar_t *con
         }
         prog_bar_finish(prog_bar);
     }
+    printf("%lu\n", sent);
 
 	return sent;
 }

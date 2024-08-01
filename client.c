@@ -39,7 +39,7 @@ fd_cleanup:
     return -1;
 }
 
-int server_connect(char *ip_str)
+int server_connect(const char *const ip_str)
 {
 	int ret;
 	struct in_addr target_ip;

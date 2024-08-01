@@ -17,6 +17,7 @@ void get_name(hello_data_t *hello)
 
 int read_file_data(file_data_t *dst, const char *const path)
 {
+    /*
 	const char *name = basename(path);
 
 	const int name_len = strlen(name);
@@ -31,6 +32,25 @@ int read_file_data(file_data_t *dst, const char *const path)
 		return ret;
 	dst->size = f_stat.st_size;
 
+	return 0;
+    */
+
+	const char *name = basename(path);
+
+	const int name_len = strlen(name);
+	if (name_len > NAME_MAX)
+		return -1;
+
+	memcpy(dst->name, name, name_len);
+	dst->name[name_len] = 0;
+
+	struct stat s;
+	if (stat(path, &s) < 0) {
+		perror("fstat");
+		return -1;
+	}
+
+	dst->size = s.st_size;
 	return 0;
 }
 
