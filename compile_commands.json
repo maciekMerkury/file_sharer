@@ -1,12 +1,13 @@
 [
   {
     "arguments": [
-      "/usr/bin/cc",
+      "/usr/bin/gcc",
       "-std=gnu17",
       "-Werror",
       "-Wall",
       "-Wno-trigraphs",
-      "-Og",
+      "-O0",
+      "-pedantic",
       "-c",
       "-o",
       "core.o",
@@ -18,12 +19,13 @@
   },
   {
     "arguments": [
-      "/usr/bin/cc",
+      "/usr/bin/gcc",
       "-std=gnu17",
       "-Werror",
       "-Wall",
       "-Wno-trigraphs",
-      "-Og",
+      "-O0",
+      "-pedantic",
       "-c",
       "-o",
       "progress_bar.o",
@@ -35,12 +37,13 @@
   },
   {
     "arguments": [
-      "/usr/bin/cc",
+      "/usr/bin/gcc",
       "-std=gnu17",
       "-Werror",
       "-Wall",
       "-Wno-trigraphs",
-      "-Og",
+      "-O0",
+      "-pedantic",
       "-c",
       "-o",
       "size_info.o",
@@ -52,12 +55,13 @@
   },
   {
     "arguments": [
-      "/usr/bin/cc",
+      "/usr/bin/gcc",
       "-std=gnu17",
       "-Werror",
       "-Wall",
       "-Wno-trigraphs",
-      "-Og",
+      "-O0",
+      "-pedantic",
       "-c",
       "-o",
       "message.o",
@@ -69,12 +73,13 @@
   },
   {
     "arguments": [
-      "/usr/bin/cc",
+      "/usr/bin/gcc",
       "-std=gnu17",
       "-Werror",
       "-Wall",
       "-Wno-trigraphs",
-      "-Og",
+      "-O0",
+      "-pedantic",
       "-c",
       "-o",
       "server.o",
@@ -86,12 +91,13 @@
   },
   {
     "arguments": [
-      "/usr/bin/cc",
+      "/usr/bin/gcc",
       "-std=gnu17",
       "-Werror",
       "-Wall",
       "-Wno-trigraphs",
-      "-Og",
+      "-O0",
+      "-pedantic",
       "-c",
       "-o",
       "client.o",
