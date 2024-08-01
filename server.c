@@ -2,6 +2,7 @@
 #include <errno.h>
 #include <poll.h>
 #include <linux/limits.h>
+#include <poll.h>
 #include <unistd.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -15,12 +16,18 @@
 #include <pwd.h>
 #include <sys/socket.h>
 
+#include "message.h"
+#include "size_info.h"
 #include "core.h"
 
 typedef struct client {
 	int socket;
 	char addr_str[INET_ADDRSTRLEN];
+    size_t name_len;
+    char *name;
 } client_t;
+
+#define TIMEOUT 1000
 
 int setup(uint16_t port)
 {
@@ -45,6 +52,19 @@ int setup(uint16_t port)
 	return sock;
 }
 
+void read_name(client_t *client) 
+{
+    if (recv(client->socket, &client->name_len, sizeof(size_t), 0) < 0)
+        ERR("recv");
+
+    client->name = malloc(client->name_len);
+    if (client->name == NULL)
+        ERR("malloc");
+
+    if (recv(client->socket, client->name, client->name_len, 0) < 0)
+        ERR("recv");
+}
+
 void accept_client(int sock, client_t *client)
 {
 	printf("Waiting for a new client\n");
@@ -58,7 +78,28 @@ void accept_client(int sock, client_t *client)
 		       INET_ADDRSTRLEN))
 		ERR("inet_ntop");
 
-	printf("client from address %s has connected\n", client->addr_str);
+    message_type t;
+    struct pollfd p = {
+        .fd = client->socket,
+        .events = POLLIN,
+    };
+
+    if (poll(&p, 1, TIMEOUT) == 0) {
+        fprintf(stderr, "client did not send data within timeout\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (recv(client->socket, &t, sizeof(message_type), 0) < 0)
+        ERR("recv");
+
+    if (t != mt_hello) {
+        fprintf(stderr, "handshake error: %u\n", t);
+        exit(EXIT_FAILURE);
+    }
+
+    read_name(client);
+
+	printf("client %s from address %s has connected\n", client->name, client->addr_str);
 }
 
 bool confirm_transfer(client_t *client, file_data_t *data, char path[PATH_MAX])
@@ -66,11 +107,11 @@ bool confirm_transfer(client_t *client, file_data_t *data, char path[PATH_MAX])
 	if (recv(client->socket, data, sizeof(file_data_t), 0) < 0)
 		ERR("recv");
 
-	file_size_t size = bytes_to_size(data->size);
+	size_info size = bytes_to_size(data->size);
 
 	printf("Do you want to receive file `%.255s` of size %.2lf %s"
 	       "from host %s? [Y/n] ",
-	       data->name, size.size, file_size_units[size.unit_idx],
+	       data->name, size.size, unit(size),
 	       client->addr_str);
 
     char *line = NULL;
@@ -85,9 +126,12 @@ bool confirm_transfer(client_t *client, file_data_t *data, char path[PATH_MAX])
 
 void receive_file(client_t *client, file_data_t *data, char path[PATH_MAX])
 {
+#pragma message "actually change this part"
+    /*
 	if (send(client->socket, start_transfer_message,
 		 strlen(start_transfer_message) + 1, 0) < 0)
 		ERR("send");
+    */
 
 	int fd;
 	if ((fd = open(path, O_RDWR | O_CREAT | O_APPEND | O_EXCL, 0644)) < 0)
@@ -129,8 +173,8 @@ void receive_file(client_t *client, file_data_t *data, char path[PATH_MAX])
 			prog_bar_advance(&bar, total_received);
 		}
 	}
-	prog_bar_finish(&bar);
 
+	prog_bar_finish(&bar);
 	printf("\nDone receiving file\n");
 
 	if (fcntl(client->socket, F_SETFL, flags) < 0)
