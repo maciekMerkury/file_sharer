@@ -6,12 +6,12 @@ LDLIBS=-lm
 CC=gcc
 
 
-default: all
+default: debug
 
 debug: CFLAGS+=$(DEBUG_CFLAGS)
 debug: all
 
-.PHONY: default all clean format
+.PHONY: default all clean format debug
 
 all: server client
 
