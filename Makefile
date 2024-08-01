@@ -1,10 +1,9 @@
-ALL_FILES=$(wildcard *.[c|h])
 CFLAGS=-std=gnu17 -Werror -Wall -Wno-trigraphs -O0 -pedantic
 DEBUG_CFLAGS=-fsanitize=address -fsanitize=undefined -g -Og
 COMMON=core.o progress_bar.o size_info.o message.o entry.o
 LDLIBS=-lm
 CC=gcc
-
+ALL_FILES=$(wildcard *.[c|h])
 
 default: debug
 

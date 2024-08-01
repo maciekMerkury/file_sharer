@@ -108,7 +108,7 @@ void recv_entry(client_t *client, entry_t *entry)
 	size_t msg_size = mt == mt_file ? sizeof(file_data_t) :
 					  sizeof(dir_data_t);
 
-	entry->type = mt == mt_file ? et_file : et_directory;
+	entry->type = mt == mt_file ? et_file : et_dir;
 
 	if (recv(client->socket, &entry->data, msg_size, 0) < 0)
 		ERR("recv");
