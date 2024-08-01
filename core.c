@@ -78,3 +78,4 @@ void expand_bash_path(char path[PATH_MAX], const char bash_path[PATH_MAX])
 		path[1] = '\0';
 	}
 }
+
