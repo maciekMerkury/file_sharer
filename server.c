@@ -1,6 +1,7 @@
 #include <errno.h>
 #include <poll.h>
 #include <linux/limits.h>
+#include <dirent.h>
 #include <poll.h>
 #include <time.h>
 #include <unistd.h>
@@ -147,7 +148,7 @@ bool confirm_transfer(client_t *client, entry_t *entry, char path[PATH_MAX])
 	if (getline(&line, &len, stdin) < 0)
 		ERR("getline");
 	char c = line[0];
-    free(line);
+	free(line);
 
 	return c == 'y' || c == 'Y' || c == '\n';
 }
@@ -236,9 +237,16 @@ int main(int argc, char *argv[])
 
 	int sock = setup(port);
 
-	// check if it's a valid directory
 	char downloads_directory[PATH_MAX];
 	realpath(argv[2], downloads_directory);
+
+    {
+        DIR *dir;
+        if ((dir = opendir(downloads_directory)) == NULL)
+            ERR("opendir");
+        if (closedir(dir) < 0)
+            ERR("closedir");
+    }
 
 	while (true) {
 		client_t client = { 0 };
