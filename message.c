@@ -12,7 +12,6 @@ void get_name(hello_data_t *hello)
 	if (getlogin_r(hello->username, hello->username_len) < 0)
 		strcpy(hello->username, default_user_name);
 	hello->username_len = strlen(hello->username) + 1;
-	printf("%lu\n", hello->username_len);
 }
 
 int read_file_data(file_data_t *dst, const char *const path)

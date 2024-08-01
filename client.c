@@ -48,21 +48,16 @@ static int read_args(args *a, int argc, char **argv)
 		return -1;
 	}
 
-	printf("%d\n", a->addr.s_addr);
-
 	if ((a->file_fd = open(argv[2], O_RDONLY)) < 0) {
 		perror("file open");
 		return -1;
 	}
 	a->path = argv[2];
-	printf("path: %s, fd: %i\n", a->path, a->file_fd);
 
 	if (argc == 4)
 		a->port = htons(atoi(argv[3]));
 	else
 		a->port = htons(DEFAULT_PORT);
-
-	printf("port: %x\n", a->port);
 
 	return 0;
 }
@@ -156,8 +151,6 @@ static int send_metadata(int soc, const file_data_t *data)
 	message_type t = mt_file;
 	if (send_all(&t, sizeof(message_type), soc, NULL) < 0)
 		return -1;
-
-	printf("name: %s\n", data->name);
 	if (send_all(data, sizeof(file_data_t), soc, NULL) < 0)
 		return -1;
 
@@ -173,28 +166,6 @@ static int send_metadata(int soc, const file_data_t *data)
 		return -1;
 	}
 }
-
-/*
-static size_t sendall(int soc, void *buf, size_t len)
-{
-    printf("sending %lu\n", len);
-    size_t sent = 0;
-
-    ssize_t s;
-    while (sent < len) {
-        s = send(soc, buf + sent, len - sent, 0);
-
-        if (s < 0) {
-            perror("send");
-            return -1;
-        }
-        sent += s;
-    }
-
-    printf("sent %lu\n", sent);
-    return sent;
-}
-*/
 
 /* will do all the cleanup necessary */
 static int client_main(in_port_t port, struct in_addr addr, int file_fd,
@@ -215,7 +186,6 @@ static int client_main(in_port_t port, struct in_addr addr, int file_fd,
 
 	switch (send_metadata(server, &f.data)) {
 	case 0:
-		printf("sending\n");
 		break;
 	case 1:
 		printf("server did not accept the transfer. exiting\n");
@@ -255,8 +225,6 @@ int main(int argc, char **argv)
 	args a;
 	if (read_args(&a, argc, argv) < 0)
 		return EXIT_FAILURE;
-
-	printf("hello\n");
 
 	return client_main(a.port, a.addr, a.file_fd, a.path);
 }

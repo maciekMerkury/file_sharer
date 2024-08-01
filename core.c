@@ -21,7 +21,6 @@
 ssize_t send_all(const void *const buf, size_t len, int soc,
 		 progress_bar_t *const prog_bar)
 {
-	printf("len: %lu\n", len);
 	ssize_t sent = 0;
 	int old_flags = 0;
 	if (prog_bar) {
@@ -61,7 +60,6 @@ ssize_t send_all(const void *const buf, size_t len, int soc,
 		}
 		prog_bar_finish(prog_bar);
 	}
-	printf("%lu\n", sent);
 
 	return sent;
 }
