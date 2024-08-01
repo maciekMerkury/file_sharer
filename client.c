@@ -91,7 +91,7 @@ int main(int argc, char **argv)
 {
     int ret = EXIT_SUCCESS;
     if (argc < 3) {
-        fprintf(stderr, "USAGE: %s IP FILEPATH", argv[0]);
+        fprintf(stderr, "USAGE: %s IP FILEPATH\n", argv[0]);
         return EXIT_FAILURE;
     }
 

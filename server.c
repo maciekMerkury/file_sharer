@@ -1,3 +1,6 @@
+#include "progress_bar.h"
+#include <errno.h>
+#include <poll.h>
 #include <linux/limits.h>
 #include <unistd.h>
 #include <stdint.h>
@@ -65,71 +68,81 @@ bool confirm_transfer(client_t *client, file_data_t *data, char path[PATH_MAX])
 
 	file_size_t size = bytes_to_size(data->size);
 
-	printf("Host %s wants to send you file `%.255s` of size %.2lf %s\n",
-	       client->addr_str, data->name, size.size,
-	       file_size_units[size.unit_idx]);
+	printf("Do you want to receive file `%.255s` of size %.2lf %s"
+	       "from host %s? [Y/n] ",
+	       data->name, size.size, file_size_units[size.unit_idx],
+	       client->addr_str);
 
-	printf("Specify a download directory (Ctrl+D to refuse transfer): ");
+    char *line = NULL;
+    size_t len;
+    if (getline(&line, &len, stdin) < 0)
+        ERR("getline");
+    char c = line[0];
 
-	char buf[PATH_MAX + 1];
-	char *ret = fgets(buf, PATH_MAX + 1, stdin);
-
-	if (ret == NULL) {
-		clearerr(stdin);
-		printf("\n");
-		return false;
-	}
-
-	char *newl = strchr(buf, '\n');
-	if (newl)
-		*newl = '\0';
-
-	expand_bash_path(path, buf);
-
-	strcat(path, data->name);
-
-	return true;
+    printf("%s\n", line);
+	return c == 'y' || c == 'Y' || c == '\n';
 }
 
-void receive_file(client_t *client, file_data_t data, char path[PATH_MAX])
+void receive_file(client_t *client, file_data_t *data, char path[PATH_MAX])
 {
 	if (send(client->socket, start_transfer_message,
 		 strlen(start_transfer_message) + 1, 0) < 0)
 		ERR("send");
 
-	printf("receiving file...\n");
-
 	int fd;
 	if ((fd = open(path, O_RDWR | O_CREAT | O_APPEND | O_EXCL, 0644)) < 0)
 		ERR("open");
-	if (ftruncate(fd, data.size) < 0)
+	if (ftruncate(fd, data->size) < 0)
 		ERR("ftruncate");
 
 	void *file;
-	if ((file = mmap(NULL, data.size, PROT_WRITE, MAP_FILE | MAP_SHARED, fd,
-			 0)) == MAP_FAILED)
+	if ((file = mmap(NULL, data->size, PROT_WRITE, MAP_FILE | MAP_SHARED,
+			 fd, 0)) == MAP_FAILED)
 		ERR("mmap");
 
 	size_t total_received = 0;
 	ssize_t recv_size;
 
-	display_progress(total_received, data.size);
-	while (total_received < data.size) {
-		if ((recv_size = recv(client->socket, file + total_received,
-				      (data.size - total_received), 0)) < 0)
-			ERR("recv");
-		total_received += recv_size;
-		display_progress(total_received, data.size);
+	int flags;
+	if ((flags = fcntl(client->socket, F_GETFL)) < 0)
+		ERR("fcntl");
+	if (fcntl(client->socket, F_SETFL, flags | O_NONBLOCK) < 0)
+		ERR("fcntl");
+
+	char title[PATH_MAX];
+	snprintf(title, PATH_MAX, "Receiving %s", path);
+
+	progress_bar_t bar;
+	prog_bar_init(&bar, title, data->size,
+		      (struct timespec){ 0, 100000000 });
+
+	prog_bar_start(&bar);
+	while (total_received < data->size) {
+		if ((recv_size =
+			     recv(client->socket,
+				  (void *)((uintptr_t)file + total_received),
+				  (data->size - total_received), 0)) < 0) {
+			if (errno != EWOULDBLOCK)
+				ERR("recv");
+		} else {
+			total_received += recv_size;
+			prog_bar_advance(&bar, total_received);
+		}
 	}
+	prog_bar_finish(&bar);
+
 	printf("\nDone receiving file\n");
 
-	if (munmap(file, data.size) < 0)
+	if (fcntl(client->socket, F_SETFL, flags) < 0)
+		ERR("fcntl");
+
+	if (munmap(file, data->size) < 0)
 		ERR("munmap");
 	if (close(fd) < 0)
 		ERR("close");
 }
 
-void disconnect_client(client_t *client)
+void cleanup_client(client_t *client)
 {
 	if (close(client->socket) < 0)
 		ERR("close");
@@ -139,34 +152,39 @@ void disconnect_client(client_t *client)
 
 void usage(char *prog)
 {
-	fprintf(stderr, "USAGE: %s port\n", prog);
+	fprintf(stderr, "USAGE: %s port download_directory\n", prog);
 	exit(EXIT_FAILURE);
 }
 
 int main(int argc, char *argv[])
 {
-	if (argc < 2)
+	if (argc < 3)
 		usage(argv[0]);
 
 	uint16_t port = atoi(argv[1]);
 
 	int sock = setup(port);
 
-	client_t client;
-	file_data_t data;
-	char path[PATH_MAX];
+	// check if it's a valid directory
+	char downloads_directory[PATH_MAX];
+	realpath(argv[2], downloads_directory);
 
 	while (true) {
-		accept_client(sock, &client);
-		bool result = confirm_transfer(&client, &data, path);
+		client_t client = { 0 };
+		file_data_t data;
+		char path[PATH_MAX];
 
-		if (!result) {
-			disconnect_client(&client);
+		accept_client(sock, &client);
+		if (!confirm_transfer(&client, &data, path)) {
+			cleanup_client(&client);
 			continue;
 		}
 
-		receive_file(&client, data, path);
-		disconnect_client(&client);
+		strcpy(path, downloads_directory);
+		strcat(path, "/");
+		strcat(path, data.name);
+		receive_file(&client, &data, path);
+		cleanup_client(&client);
 	}
 
 	close(sock);

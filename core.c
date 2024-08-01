@@ -4,14 +4,12 @@
 
 #include <fcntl.h>
 #include <errno.h>
-#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
-#include <time.h>
 #include <unistd.h>
 #include <pwd.h>
 #include <unistd.h>
@@ -117,75 +115,3 @@ ssize_t send_all(const void *const buf, size_t len, int soc, progress_bar_t *con
 	return sent;
 }
 
-void display_progress(const size_t curr, const size_t max)
-{
-	static struct timespec prev_ts = { 0 };
-	static size_t prev_curr = 0;
-
-	struct timespec ts;
-	if (clock_gettime(CLOCK_REALTIME, &ts) < 0)
-		ERR("clock_gettime");
-
-	file_size_t file_size = { 0 };
-	if (prev_ts.tv_sec != 0) {
-		double elapsed_sec =
-			(ts.tv_sec - prev_ts.tv_sec) +
-			(ts.tv_nsec - prev_ts.tv_nsec) / 1000000000.0;
-		size_t delta = curr - prev_curr;
-		size_t bytes_per_second = delta / elapsed_sec;
-
-		file_size = bytes_to_size(bytes_per_second);
-	}
-
-	prev_curr = curr;
-	prev_ts = ts;
-
-	struct winsize w;
-	ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
-	int bar_width = w.ws_col - 27 - 10;
-
-    if (prev_ts.tv_sec != 0) {
-        for (int i = 10; i < w.ws_col; ++i) {
-            putchar('\b');
-        }
-    }
-
-	double state = (double)curr / max;
-
-	unsigned done = round(state * bar_width);
-
-	unsigned i;
-	putchar('[');
-	for (i = 0; i < done; ++i) {
-		putchar('#');
-	}
-	for (; i < bar_width; ++i) {
-		putchar(' ');
-	}
-	putchar(']');
-
-	printf(" (%04.1lf%%)", state * 100.0);
-	if (done != bar_width) {
-		putchar(' ');
-	}
-
-	printf(" %6.1lf %3s/s", file_size.size,
-	       file_size_units[file_size.unit_idx]);
-
-	fflush(stdout);
-}
-
-void expand_bash_path(char path[PATH_MAX], const char bash_path[PATH_MAX])
-{
-	if (bash_path[0] == '~') {
-		struct passwd *pw = getpwuid(getuid());
-		path = stpcpy(path, pw->pw_dir);
-		bash_path++;
-	}
-
-	path = stpcpy(path, bash_path);
-	if (*(path - 1) != '/') {
-		path[0] = '/';
-		path[1] = '\0';
-	}
-}
