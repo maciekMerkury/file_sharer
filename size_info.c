@@ -22,6 +22,5 @@ size_info bytes_to_size(size_t byte_size)
 
 const char *const unit(size_info info)
 {
-    return (info.unit_idx < UNIT_LEN) ? size_units[info.unit_idx] : NULL;
+	return (info.unit_idx < UNIT_LEN) ? size_units[info.unit_idx] : NULL;
 }
-

@@ -11,8 +11,9 @@
  */
 void expand_bash_path(char path[PATH_MAX], const char bash_path[PATH_MAX]);
 
-ssize_t send_all(const void *const buf, size_t len, int soc, progress_bar_t *prog_bar);
+ssize_t send_all(const void *const buf, size_t len, int soc,
+		 progress_bar_t *prog_bar);
 
-#define ERR(source)                                                     \
-	(perror(source), fprintf(stderr, "%s:%d\n", __FILE__, __LINE__),    \
+#define ERR(source)                                                      \
+	(perror(source), fprintf(stderr, "%s:%d\n", __FILE__, __LINE__), \
 	 exit(EXIT_FAILURE))

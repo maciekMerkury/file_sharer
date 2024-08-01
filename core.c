@@ -18,50 +18,50 @@
 
 #include "core.h"
 
-ssize_t send_all(const void *const buf, size_t len, int soc, progress_bar_t *const prog_bar)
+ssize_t send_all(const void *const buf, size_t len, int soc,
+		 progress_bar_t *const prog_bar)
 {
-    printf("len: %lu\n", len);
+	printf("len: %lu\n", len);
 	ssize_t sent = 0;
-    int old_flags = 0;
+	int old_flags = 0;
 	if (prog_bar) {
-        old_flags = fcntl(soc, F_GETFL, 0);
-        if (fcntl(soc, F_SETFL, old_flags | O_NONBLOCK) < 0) {
-            perror("fcntl");
-            return -1;
-        }
+		old_flags = fcntl(soc, F_GETFL, 0);
+		if (fcntl(soc, F_SETFL, old_flags | O_NONBLOCK) < 0) {
+			perror("fcntl");
+			return -1;
+		}
 
-        assert(!(old_flags & O_NONBLOCK));
+		assert(!(old_flags & O_NONBLOCK));
 		prog_bar_start(prog_bar);
-    }
+	}
 
 	ssize_t s;
 	while (sent < len) {
 		s = send(soc, (void *)((uintptr_t)buf + sent), len - sent, 0);
 		if (s < 0) {
 			if (errno != EWOULDBLOCK) {
-                perror("send");
-                sent = s;
-                break;
-            }
+				perror("send");
+				sent = s;
+				break;
+			}
 
 			s = 0;
 		} else {
-            sent += s;
-        }
+			sent += s;
+		}
 
-
-        if (prog_bar)
-            prog_bar_advance(prog_bar, sent);
+		if (prog_bar)
+			prog_bar_advance(prog_bar, sent);
 	}
 
-    if (prog_bar) {
-        if (fcntl(soc, F_SETFL, old_flags) < 0) {
-            perror("fcntl");
-            return -1;
-        }
-        prog_bar_finish(prog_bar);
-    }
-    printf("%lu\n", sent);
+	if (prog_bar) {
+		if (fcntl(soc, F_SETFL, old_flags) < 0) {
+			perror("fcntl");
+			return -1;
+		}
+		prog_bar_finish(prog_bar);
+	}
+	printf("%lu\n", sent);
 
 	return sent;
 }
