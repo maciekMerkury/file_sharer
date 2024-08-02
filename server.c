@@ -105,12 +105,11 @@ void recv_entry(client_t *client, entry_t *entry)
 	if (recv(client->socket, &mt, sizeof(message_type), 0) < 0)
 		ERR("recv");
 
-	size_t msg_size = mt == mt_file ? sizeof(file_data_t) :
-					  sizeof(dir_data_t);
+	size_t msg_size = sizeof(entry_t);
 
 	entry->type = mt == mt_file ? et_file : et_dir;
 
-	if (recv(client->socket, &entry->data, msg_size, 0) < 0)
+	if (recv(client->socket, entry, msg_size, 0) < 0)
 		ERR("recv");
 }
 
@@ -140,12 +139,11 @@ bool confirm_transfer(client_t *client, entry_t *entry, char path[PATH_MAX])
 {
 	recv_entry(client, entry);
 
-	size_info size = bytes_to_size(get_entry_size(entry));
+	size_info size = bytes_to_size(entry->size);
 	printf("Do you want to receive %s `%.255s` of size %s"
 	       " from user %s at host %s [Y/n] ",
-           get_entry_type_name(entry), get_entry_name(entry),
-	       unit(size), client->name, client->addr_str);
-	       
+	       get_entry_type_name(entry), entry->name, unit(size),
+	       client->name, client->addr_str);
 
 	char *line = NULL;
 	size_t len;
@@ -165,12 +163,12 @@ void recv_entry_data(client_t *client, entry_t *entry, char path[PATH_MAX])
 	int fd;
 	if ((fd = open(path, O_RDWR | O_CREAT | O_APPEND | O_EXCL, 0644)) < 0)
 		ERR("open");
-	if (ftruncate(fd, get_entry_size(entry)) < 0)
+	if (ftruncate(fd, entry->size) < 0)
 		ERR("ftruncate");
 
 	void *file;
-	if ((file = mmap(NULL, get_entry_size(entry), PROT_WRITE,
-			 MAP_FILE | MAP_SHARED, fd, 0)) == MAP_FAILED)
+	if ((file = mmap(NULL, entry->size, PROT_WRITE, MAP_FILE | MAP_SHARED,
+			 fd, 0)) == MAP_FAILED)
 		ERR("mmap");
 
 	size_t total_received = 0;
@@ -186,13 +184,14 @@ void recv_entry_data(client_t *client, entry_t *entry, char path[PATH_MAX])
 	snprintf(title, PATH_MAX, "Receiving %s", path);
 
 	progress_bar_t bar;
-	prog_bar_init(&bar, title, get_entry_size(entry),
+	prog_bar_init(&bar, title, entry->size,
 		      (struct timespec){ 0, 100000000 });
 
-	while (total_received < get_entry_size(entry)) {
-		if ((recv_size = recv(client->socket, (void*)((uintptr_t)file + total_received),
-				      (get_entry_size(entry) - total_received),
-				      0)) < 0) {
+	while (total_received < entry->size) {
+		if ((recv_size =
+			     recv(client->socket,
+				  (void *)((uintptr_t)file + total_received),
+				  (entry->size - total_received), 0)) < 0) {
 			if (errno != EWOULDBLOCK)
 				ERR("recv");
 		} else {
@@ -207,7 +206,7 @@ void recv_entry_data(client_t *client, entry_t *entry, char path[PATH_MAX])
 	if (fcntl(client->socket, F_SETFL, flags) < 0)
 		ERR("fcntl");
 
-	if (munmap(file, get_entry_size(entry)) < 0)
+	if (munmap(file, entry->size) < 0)
 		ERR("munmap");
 	if (close(fd) < 0)
 		ERR("close");
@@ -255,7 +254,7 @@ int main(int argc, char *argv[])
 
 		strcpy(path, downloads_directory);
 		strcat(path, "/");
-		strcat(path, get_entry_name(&entry));
+		strcat(path, entry.name);
 
 		recv_entry_data(&client, &entry, path);
 		cleanup_client(&client);

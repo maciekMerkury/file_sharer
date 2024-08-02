@@ -1,4 +1,5 @@
 #include "core.h"
+#include "entry.h"
 #include "message.h"
 #include "progress_bar.h"
 #include "size_info.h"
@@ -32,7 +33,7 @@ typedef struct args {
 typedef struct file {
 	int fd;
 	void *map;
-	file_data_t data;
+	entry_t data;
 } file;
 
 static int read_args(args *a, int argc, char **argv)
@@ -64,6 +65,8 @@ static int read_args(args *a, int argc, char **argv)
 
 static int read_file(file *f, int fd, const char *const path)
 {
+#pragma message "actually support dirs"
+
 	f->fd = fd;
 	if (read_file_data(&f->data, path) < 0)
 		return -1;
@@ -146,12 +149,12 @@ soc_cleanup:
  *      0 on server accepting
  *      1 on server rejecting
  */
-static int send_metadata(int soc, const file_data_t *data)
+static int send_metadata(int soc, const entry_t *entry)
 {
 	message_type t = mt_file;
 	if (send_all(&t, sizeof(message_type), soc, NULL) < 0)
 		return -1;
-	if (send_all(data, sizeof(file_data_t), soc, NULL) < 0)
+	if (send_all(entry, sizeof(entry_t), soc, NULL) < 0)
 		return -1;
 
 	if (recv(soc, &t, sizeof(t), 0) < 0)

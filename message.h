@@ -21,28 +21,3 @@ typedef struct hello_data {
 } hello_data_t;
 
 void get_name(hello_data_t *hello);
-
-typedef struct file_data {
-	off_t size;
-	char name[NAME_MAX + 1];
-	/*
-     * only the perms, not the filetype
-     */
-	mode_t mode;
-} file_data_t;
-
-int read_file_data(file_data_t *dst, const char *const path);
-
-typedef struct dir_data {
-	char name[NAME_MAX + 1];
-	// TODO: rename
-	/*
-     * the total number of inner files & dirs, recursive
-     */
-	size_t sub_things;
-	/*
-     * the total size of the data, recursive
-     */
-	off_t total_data_size;
-} dir_data_t;
-
