@@ -2,6 +2,7 @@
 #include <errno.h>
 #include <poll.h>
 #include <linux/limits.h>
+#include <dirent.h>
 #include <poll.h>
 #include <time.h>
 #include <unistd.h>
@@ -65,10 +66,6 @@ bool recv_hello(client_t *client)
 		.events = POLLIN,
 	};
 
-	client->name = malloc(client->name_len);
-	if (client->name == NULL)
-		ERR("malloc");
-
 	if (poll(&p, 1, TIMEOUT) == 0) {
 		fprintf(stderr, "client did not send data within timeout\n");
 		return false;
@@ -93,11 +90,11 @@ bool recv_hello(client_t *client)
 	if (recv(client->socket, client->name, client->name_len, 0) < 0)
 		ERR("recv");
 
-    mt = mt_ack;
-    if (send_all(&mt, sizeof(message_type), client->socket, NULL) < 0)
-        ERR("send_all");
+	mt = mt_ack;
+	if (send_all(&mt, sizeof(message_type), client->socket, NULL) < 0)
+		ERR("send_all");
 
-    return true;
+	return true;
 }
 
 void recv_entry(client_t *client, entry_t *entry)
@@ -152,6 +149,7 @@ bool confirm_transfer(client_t *client, entry_t *entry, char path[PATH_MAX])
 	if (getline(&line, &len, stdin) < 0)
 		ERR("getline");
 	char c = line[0];
+	free(line);
 
 	return c == 'y' || c == 'Y' || c == '\n';
 }
@@ -239,9 +237,16 @@ int main(int argc, char *argv[])
 
 	int sock = setup(port);
 
-	// check if it's a valid directory
 	char downloads_directory[PATH_MAX];
 	realpath(argv[2], downloads_directory);
+
+    {
+        DIR *dir;
+        if ((dir = opendir(downloads_directory)) == NULL)
+            ERR("opendir");
+        if (closedir(dir) < 0)
+            ERR("closedir");
+    }
 
 	while (true) {
 		client_t client = { 0 };
