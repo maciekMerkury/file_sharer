@@ -5,10 +5,10 @@
 #include <sys/types.h>
 
 typedef struct entry {
-        /*
+	/*
          * can only be mt_file or mt_dir
          */
-        message_type type;
+	message_type type;
 	/*
         * total size, sans this metadata
         * for files, its just the size

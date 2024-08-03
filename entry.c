@@ -41,25 +41,26 @@ int read_file_data(entry_t *dst, const char *const path)
 
 ssize_t total_entry_len(const entry_t *entry)
 {
-	size_t total_len = sizeof(message_type) + sizeof(size_t) * 2 + strlen(entry->name);
+	size_t total_len =
+		sizeof(message_type) + sizeof(size_t) * 2 + strlen(entry->name);
 
 	switch (entry->type) {
-		case mt_file:
-			total_len += sizeof(mode_t);
-			break;
-		case mt_dir:
-			total_len += sizeof(size_t);
-			for (size_t i = 0; i < entry->data.dir.inner_count; i++) {
-				total_len += total_entry_len(&entry->data.dir.inners[i]);
-			}
-			break;
-		default:
-			return -1;
+	case mt_file:
+		total_len += sizeof(mode_t);
+		break;
+	case mt_dir:
+		total_len += sizeof(size_t);
+		for (size_t i = 0; i < entry->data.dir.inner_count; i++) {
+			total_len +=
+				total_entry_len(&entry->data.dir.inners[i]);
+		}
+		break;
+	default:
+		return -1;
 	}
 
 	return total_len;
 }
-
 
 /* does not copy the null byte from name, but does prepend name with `size_t name_len`
  *
@@ -78,17 +79,19 @@ static void *populate_mem(void *dst, const entry_t *restrict entry)
 	dst = mempcpy(dst, entry->name, name_len);
 
 	switch (entry->type) {
-		case mt_file:
-			dst = mempcpy(dst, &entry->data.file.permissions, sizeof(mode_t));
-			break;
-		case mt_dir:
-			dst = mempcpy(dst, &entry->data.dir.inner_count, sizeof(size_t));
-			for (size_t i = 0; i < entry->data.dir.inner_count; ++i) {
-				dst = populate_mem(dst, &entry->data.dir.inners[i]);
-			}
-			break;
-		default:
-			return NULL;
+	case mt_file:
+		dst = mempcpy(dst, &entry->data.file.permissions,
+			      sizeof(mode_t));
+		break;
+	case mt_dir:
+		dst = mempcpy(dst, &entry->data.dir.inner_count,
+			      sizeof(size_t));
+		for (size_t i = 0; i < entry->data.dir.inner_count; ++i) {
+			dst = populate_mem(dst, &entry->data.dir.inners[i]);
+		}
+		break;
+	default:
+		return NULL;
 	}
 
 	return dst;
@@ -97,21 +100,25 @@ static void *populate_mem(void *dst, const entry_t *restrict entry)
 void *deflate_entry(const entry_t *entry, void *dst, size_t len)
 {
 	ssize_t size = total_entry_len(entry);
-	if (size < 0) return NULL;
+	if (size < 0)
+		return NULL;
 
 	// this is just a safety check, but should never be actually executed if the func is used correctly
-	if (dst && len < size) return NULL;
-	
+	if (dst && len < size)
+		return NULL;
+
 	void *data;
 	if (dst) {
 		data = dst;
 	} else {
 		data = malloc(size);
-		if (!data) return NULL;
+		if (!data)
+			return NULL;
 	}
 
 	if (!populate_mem(data, entry)) {
-		if (!dst) free(data);
+		if (!dst)
+			free(data);
 		return NULL;
 	}
 

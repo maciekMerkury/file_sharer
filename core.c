@@ -20,10 +20,10 @@ ssize_t send_all(const void *const restrict buf, size_t len, int soc,
 {
 	ssize_t sent = 0;
 	int old_flags = 0;
-    struct pollfd p = {
-        .fd = soc,
-        .events = POLLIN,
-    };
+	struct pollfd p = {
+		.fd = soc,
+		.events = POLLIN,
+	};
 
 	if (prog_bar) {
 		old_flags = fcntl(soc, F_GETFL, 0);
@@ -62,7 +62,7 @@ ssize_t send_all(const void *const restrict buf, size_t len, int soc,
 				break;
 			}
 			assert(ret == 1);
-	}
+		}
 	}
 
 	if (prog_bar) {

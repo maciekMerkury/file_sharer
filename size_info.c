@@ -24,4 +24,3 @@ const char *const unit(size_info info)
 {
 	return (info.unit_idx < UNIT_LEN) ? size_units[info.unit_idx] : NULL;
 }
-

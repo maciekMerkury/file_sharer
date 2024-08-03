@@ -239,13 +239,13 @@ int main(int argc, char *argv[])
 	char downloads_directory[PATH_MAX];
 	realpath(argv[2], downloads_directory);
 
-    {
-        DIR *dir;
-        if ((dir = opendir(downloads_directory)) == NULL)
-            ERR("opendir");
-        if (closedir(dir) < 0)
-            ERR("closedir");
-    }
+	{
+		DIR *dir;
+		if ((dir = opendir(downloads_directory)) == NULL)
+			ERR("opendir");
+		if (closedir(dir) < 0)
+			ERR("closedir");
+	}
 
 	while (true) {
 		client_t client = { 0 };
