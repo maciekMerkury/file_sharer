@@ -1,9 +1,10 @@
 CFLAGS=-std=gnu17 -Werror -Wall -Wno-trigraphs -Os -pedantic
 DEBUG_CFLAGS=-fsanitize=address -fsanitize=undefined -g -Og
-COMMON=core.o progress_bar.o size_info.o message.o entry.o
+COMMON:=core.o progress_bar.o size_info.o message.o entry.o
 LDLIBS=-lm
-CC=gcc
-ALL_FILES:=$(wildcard *.[c|h])
+CC:=gcc
+ALL_FILES :=$(wildcard *.[c|h])
+MAKEFLAGS += --jobs=$(shell nproc)
 
 default: debug
 
