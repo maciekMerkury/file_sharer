@@ -3,7 +3,7 @@ DEBUG_CFLAGS=-fsanitize=address -fsanitize=undefined -g -Og
 COMMON=core.o progress_bar.o size_info.o message.o entry.o
 LDLIBS=-lm
 CC=gcc
-ALL_FILES=$(wildcard *.[c|h])
+ALL_FILES:=$(wildcard *.[c|h])
 
 default: debug
 
@@ -15,10 +15,10 @@ debug: all
 all: server client
 
 server: $(COMMON) server.o
-	gcc $(CFLAGS) $(LDLIBS) -o server server.o $(COMMON)
+	$(CC) $(CFLAGS) $(LDLIBS) -o server server.o $(COMMON)
 
 client: $(COMMON) client.o
-	gcc $(CFLAGS) $(LDLIBS) -o client client.o $(COMMON)
+	$(CC) $(CFLAGS) $(LDLIBS) -o client client.o $(COMMON)
 
 clean:
 	rm -f *.o client server
