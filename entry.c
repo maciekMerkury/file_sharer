@@ -93,11 +93,6 @@ static void *populate_mem(void *dst, const entry_t *restrict entry)
 	return dst;
 }
 
-/* if `dst` is NULL, `len` is disregarded, and new memory is allocated
- *
- * if `dst` is not NULL, `len` >= `calculate_total_size(entry)` must hold
- *
- * returns ptr to the whole structure (`dst` if provided) or NULL on error */
 void *flatten_entry(const entry_t *entry, void *dst, size_t len)
 {
 	ssize_t size = total_entry_len(entry);
