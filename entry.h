@@ -33,9 +33,26 @@ typedef struct entry {
 char *get_entry_type_name(entry_t *const entry);
 int read_file_data(entry_t *entry, const char *const path);
 
+ssize_t total_entry_len(const entry_t *entry);
+
 /* if `dst` is NULL, `len` is disregarded, and new memory is allocated
  *
  * if `dst` is not NULL, `len` >= `calculate_total_size(entry)` must hold
  *
  * returns ptr to the whole structure (`dst` if provided) or NULL on error */
-void *flatten_entry(const entry_t *entry, void *dst, size_t len);
+void *deflate_entry(const entry_t *entry, void *dst, size_t len);
+
+/* will allocate memory for `inners` if e->type == mt_dir
+ *
+ * TODO: think of a way for this function to not have to allocate memory
+ */
+void const *inflate_entry(entry_t *restrict e, const void *restrict mem);
+
+/* will not dealocate entry
+ *
+ * assumes:
+ * 	a) name was allocated
+ * 	b) if type == mt_dir, all inners were allocated
+ *
+ * if the entry was created using inflate_entry, those hold */
+void entry_dealocate(const entry_t *entry);

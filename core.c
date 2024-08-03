@@ -51,18 +51,18 @@ ssize_t send_all(const void *const restrict buf, size_t len, int soc,
 
 		if (prog_bar) {
 			prog_bar_advance(prog_bar, sent);
-            int ret = poll(&p, 1, DEFAULT_POLL_TIMEOUT);
-            if (ret == 0) {
-                fprintf(stderr, "sending timed out\n");
-                sent = -1;
-                break;
-            } else if (ret < 0) {
-                perror("send_all poll");
-                sent = -1;
-                break;
-            }
-            assert(ret == 1);
-        }
+			int ret = poll(&p, 1, DEFAULT_POLL_TIMEOUT);
+			if (ret == 0) {
+				fprintf(stderr, "sending timed out\n");
+				sent = -1;
+				break;
+			} else if (ret < 0) {
+				perror("send_all poll");
+				sent = -1;
+				break;
+			}
+			assert(ret == 1);
+	}
 	}
 
 	if (prog_bar) {
@@ -91,3 +91,8 @@ void expand_bash_path(char path[PATH_MAX], const char bash_path[PATH_MAX])
 	}
 }
 
+void *memcpyy(void *restrict dest, const void *restrict src, size_t len)
+{
+	memcpy(dest, src, len);
+	return (void *)((uintptr_t)src + len);
+}

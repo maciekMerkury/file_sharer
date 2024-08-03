@@ -99,17 +99,16 @@ bool recv_hello(client_t *client)
 
 void recv_entry(client_t *client, entry_t *entry)
 {
-	message_type mt;
-	if (recv(client->socket, &mt, sizeof(message_type), 0) < 0)
+	size_t s;
+	if (recv(client->socket, &s, sizeof(size_t), 0) < 0)
 		ERR("recv");
 
-	size_t msg_size = sizeof(entry_t);
-
-        assert(mt == mt_file || mt == mt_dir);
-	entry->type = mt;
-
-	if (recv(client->socket, entry, msg_size, 0) < 0)
+	void *data = malloc(s);
+	if (recv(client->socket, data, s, 0) < 0)
 		ERR("recv");
+
+	inflate_entry(entry, data);
+	assert(entry->type == mt_file || entry->type == mt_dir);
 }
 
 bool accept_client(int sock, client_t *client)
@@ -265,6 +264,7 @@ int main(int argc, char *argv[])
 
 		recv_entry_data(&client, &entry, path);
 		cleanup_client(&client);
+		entry_dealocate(&entry);
 	}
 
 	close(sock);

@@ -151,12 +151,28 @@ soc_cleanup:
  */
 static int send_metadata(int soc, const entry_t *entry)
 {
-	message_type t = mt_file;
-	if (send_all(&t, sizeof(message_type), soc, NULL) < 0)
-		return -1;
-	if (send_all(entry, sizeof(entry_t), soc, NULL) < 0)
-		return -1;
+	int ret = 0;
+	size_t len = total_entry_len(entry);
+	void *dat = malloc(len);
+	if (deflate_entry(entry, dat, len) != dat) {
+		ret = -1;
+		goto data_cleanup;
+	}
 
+	if ((ret = send_all(&len, sizeof(size_t), soc, NULL)) < 0)
+		goto data_cleanup;
+
+	if ((ret = send_all(dat, len, soc, NULL)) < 0)
+		goto data_cleanup;
+
+	ret = 0; // if we're here, nothing returned < 0
+	// this is ugly
+data_cleanup:
+	free(dat);
+	if (ret)
+		return ret;
+
+	message_type t;
 	if (recv(soc, &t, sizeof(t), 0) < 0)
 		return -1;
 
@@ -183,12 +199,9 @@ static int client_main(in_port_t port, struct in_addr addr, int file_fd,
 	if (server_connect(&server, addr, port) != 0)
 		CLEANUP(file_cleanup);
 
-	size_info size = bytes_to_size(f.data.size);
-	printf("sending %s, size %.2lf%s\n", f.data.name, size.size,
-	       unit(size));
-
 	switch (send_metadata(server, &f.data)) {
 	case 0:
+		printf("server accepted\n");
 		break;
 	case 1:
 		printf("server did not accept the transfer. exiting\n");
@@ -198,7 +211,14 @@ static int client_main(in_port_t port, struct in_addr addr, int file_fd,
 		perror("sending metadata");
 		CLEANUP(server_cleanup);
 		break;
+	default:
+		fprintf(stderr, "sus\n");
+		exit(21);
 	}
+
+	size_info size = bytes_to_size(f.data.size);
+	printf("sending %s, size %.2lf%s\n", f.data.name, size.size,
+	       unit(size));
 
 	progress_bar_t bar;
 	prog_bar_init(&bar, f.data.name, f.data.size,
@@ -217,6 +237,7 @@ server_cleanup:
 file_cleanup:
 	munmap(f.map, f.data.size);
 	close(f.fd);
+	entry_dealocate(&f.data);
 
 	return ret;
 }

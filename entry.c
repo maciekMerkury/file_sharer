@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 
 #include <sys/types.h>
+#include "core.h"
 #include "entry.h"
 #include "message.h"
 #include <sys/stat.h>
@@ -38,7 +39,7 @@ int read_file_data(entry_t *dst, const char *const path)
 	return 0;
 }
 
-static ssize_t total_entry_len(const entry_t *entry)
+ssize_t total_entry_len(const entry_t *entry)
 {
 	size_t total_len = sizeof(message_type) + sizeof(size_t) * 2 + strlen(entry->name);
 
@@ -93,7 +94,7 @@ static void *populate_mem(void *dst, const entry_t *restrict entry)
 	return dst;
 }
 
-void *flatten_entry(const entry_t *entry, void *dst, size_t len)
+void *deflate_entry(const entry_t *entry, void *dst, size_t len)
 {
 	ssize_t size = total_entry_len(entry);
 	if (size < 0) return NULL;
@@ -117,3 +118,50 @@ void *flatten_entry(const entry_t *entry, void *dst, size_t len)
 	return data;
 }
 
+void const *inflate_entry(entry_t *restrict e, const void *restrict mem)
+{
+	mem = memcpyy(&e->type, mem, sizeof(message_type));
+	mem = memcpyy(&e->size, mem, sizeof(size_t));
+
+	size_t name_len;
+	mem = memcpyy(&name_len, mem, sizeof(size_t));
+	e->name = malloc(name_len + 1);
+
+	mem = memcpyy(e->name, mem, name_len);
+	e->name[name_len] = '\0';
+
+	switch (e->type) {
+	case mt_file:
+		mem = memcpyy(&e->data.file.permissions, mem, sizeof(mode_t));
+		break;
+	case mt_dir: {
+		size_t inner_count;
+		mem = memcpyy(&inner_count, mem, sizeof(size_t));
+		e->data.dir.inner_count = inner_count;
+		e->data.dir.inners = malloc(inner_count * sizeof(entry_t));
+		for (size_t i = 0; i < inner_count; ++i)
+			mem = inflate_entry(e->data.dir.inners + i, mem);
+		break;
+	}
+	default:
+		return NULL;
+	}
+
+	return mem;
+}
+
+void entry_dealocate(const entry_t *entry)
+{
+	free(entry->name);
+
+	if (entry->type == mt_file)
+		return;
+
+	const size_t ic = entry->data.dir.inner_count;
+	const entry_t *inners = entry->data.dir.inners;
+
+	for (size_t i = 0; i < ic; ++i) {
+		entry_dealocate(inners + i);
+	}
+	free(entry->data.dir.inners);
+}
