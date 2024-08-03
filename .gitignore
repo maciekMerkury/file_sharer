@@ -2,10 +2,5 @@ client
 server
 *.o
 *.tar.gz
-*.img
-kvstore
-*.swp
-*.dat
 .cache/*
-__pycache__/**/*
-compile_commands.json
+*.json
