@@ -48,11 +48,11 @@ void *deflate_entry(const entry_t *entry, void *dst, size_t len);
  */
 void const *inflate_entry(entry_t *restrict e, const void *restrict mem);
 
-/* will not dealocate entry
+/* will not deallocate entry
  *
  * assumes:
  * 	a) name was allocated
  * 	b) if type == mt_dir, all inners were allocated
  *
  * if the entry was created using inflate_entry, those hold */
-void entry_dealocate(const entry_t *entry);
+void entry_deallocate(const entry_t *entry);

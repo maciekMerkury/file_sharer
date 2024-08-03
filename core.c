@@ -76,21 +76,6 @@ ssize_t send_all(const void *const restrict buf, size_t len, int soc,
 	return sent;
 }
 
-void expand_bash_path(char path[PATH_MAX], const char bash_path[PATH_MAX])
-{
-	if (bash_path[0] == '~') {
-		struct passwd *pw = getpwuid(getuid());
-		path = stpcpy(path, pw->pw_dir);
-		bash_path++;
-	}
-
-	path = stpcpy(path, bash_path);
-	if (*(path - 1) != '/') {
-		path[0] = '/';
-		path[1] = '\0';
-	}
-}
-
 void *memcpyy(void *restrict dest, const void *restrict src, size_t len)
 {
 	memcpy(dest, src, len);

@@ -236,7 +236,7 @@ server_cleanup:
 file_cleanup:
 	munmap(f.map, f.data.size);
 	close(f.fd);
-	entry_dealocate(&f.data);
+	entry_deallocate(&f.data);
 
 	return ret;
 }

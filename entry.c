@@ -157,7 +157,7 @@ void const *inflate_entry(entry_t *restrict e, const void *restrict mem)
 	return mem;
 }
 
-void entry_dealocate(const entry_t *entry)
+void entry_deallocate(const entry_t *entry)
 {
 	free(entry->name);
 
@@ -168,7 +168,7 @@ void entry_dealocate(const entry_t *entry)
 	const entry_t *inners = entry->data.dir.inners;
 
 	for (size_t i = 0; i < ic; ++i) {
-		entry_dealocate(inners + i);
+		entry_deallocate(inners + i);
 	}
 	free(entry->data.dir.inners);
 }

@@ -108,6 +108,7 @@ void recv_entry(client_t *client, entry_t *entry)
 		ERR("recv");
 
 	inflate_entry(entry, data);
+	free(data);
 	assert(entry->type == mt_file || entry->type == mt_dir);
 }
 
@@ -127,7 +128,7 @@ bool accept_client(int sock, client_t *client)
 	if (!recv_hello(client))
 		return false;
 
-	printf("client %s from address %s has connected\n", client->name,
+	printf("Client %s from address %s has connected\n", client->name,
 	       client->addr_str);
 
 	return true;
@@ -138,9 +139,9 @@ bool confirm_transfer(client_t *client, entry_t *entry, char path[PATH_MAX])
 	recv_entry(client, entry);
 
 	size_info size = bytes_to_size(entry->size);
-	printf("Do you want to receive %s `%.255s` of size %s"
+	printf("Do you want to receive %s `%.255s` of size %.2lf %s"
 	       " from user %s at host %s [Y/n] ",
-	       get_entry_type_name(entry), entry->name, unit(size),
+	       get_entry_type_name(entry), entry->name, size.size, unit(size),
 	       client->name, client->addr_str);
 
 	char *line = NULL;
@@ -200,7 +201,7 @@ void recv_entry_data(client_t *client, entry_t *entry, char path[PATH_MAX])
 	}
 
 	prog_bar_finish(&bar);
-	printf("\nDone receiving file\n");
+	printf("Done receiving file\n");
 
 	if (fcntl(client->socket, F_SETFL, flags) < 0)
 		ERR("fcntl");
@@ -264,7 +265,7 @@ int main(int argc, char *argv[])
 
 		recv_entry_data(&client, &entry, path);
 		cleanup_client(&client);
-		entry_dealocate(&entry);
+		entry_deallocate(&entry);
 	}
 
 	close(sock);

@@ -5,11 +5,6 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <sys/types.h>
-/*
- * bash_path has to be null-terminated
- * path is a null-terminated string ending with '/'
- */
-void expand_bash_path(char path[PATH_MAX], const char bash_path[PATH_MAX]);
 
 #define DEFAULT_POLL_TIMEOUT (1000)
 ssize_t send_all(const void *const buf, size_t len, int soc,
