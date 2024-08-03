@@ -165,12 +165,11 @@ static int send_metadata(int soc, const entry_t *entry)
 	if ((ret = send_all(dat, len, soc, NULL)) < 0)
 		goto data_cleanup;
 
-	ret = 0; // if we're here, nothing returned < 0
 	// this is ugly
 data_cleanup:
 	free(dat);
-	if (ret)
-		return ret;
+	if (ret < 0)
+		return -1;
 
 	message_type t;
 	if (recv(soc, &t, sizeof(t), 0) < 0)
