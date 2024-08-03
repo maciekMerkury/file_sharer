@@ -1,34 +1,22 @@
 #pragma once
+#include "message.h"
 #include <linux/limits.h>
 #include <stddef.h>
 #include <sys/types.h>
-/*
-typedef struct entry {
-	enum entry_type { et_file, et_dir } type;
-	union entry_data {
-		file_data_t file;
-		dir_data_t dir;
-	} data;
-} entry_t;
-*/
 
 typedef struct entry {
-	enum entry_type { et_file, et_dir } type;
+        /*
+         * can only be mt_file or mt_dir
+         */
+        message_type type;
 	/*
-     * total size.
-     * for files, its just the size
-     * for directories, its the total size of all the data (sort of like du -d0 <name>)
-     */
+        * total size, sans this metadata
+        * for files, its just the size
+        * for directories, its the total size of all the data (sort of like du -d0 <name>)
+        */
 	size_t size;
 
-	/* consider whether this should be a dynamic array 
-     * pros:
-     *      lower mem usage
-     *      less data to send
-     * cons:
-     *      the dir_data's inners array would not be of constant length, and would probably be have to be a linked list
-     */
-	char name[NAME_MAX + 1];
+	char *name;
 
 	union {
 		struct file_data {
@@ -43,5 +31,11 @@ typedef struct entry {
 } entry_t;
 
 char *get_entry_type_name(entry_t *const entry);
-
 int read_file_data(entry_t *entry, const char *const path);
+
+/* if `dst` is NULL, `len` is disregarded, and new memory is allocated
+ *
+ * if `dst` is not NULL, `len` >= `calculate_total_size(entry)` must hold
+ *
+ * returns ptr to the whole structure (`dst` if provided) or NULL on error */
+void *flatten_entry(const entry_t *entry, void *dst, size_t len);

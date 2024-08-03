@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <errno.h>
 #include <poll.h>
 #include <linux/limits.h>
@@ -107,7 +108,8 @@ void recv_entry(client_t *client, entry_t *entry)
 
 	size_t msg_size = sizeof(entry_t);
 
-	entry->type = mt == mt_file ? et_file : et_dir;
+        assert(mt == mt_file || mt == mt_dir);
+	entry->type = mt;
 
 	if (recv(client->socket, entry, msg_size, 0) < 0)
 		ERR("recv");
