@@ -34,9 +34,11 @@ typedef struct entry {
 } entry_t;
 
 char *get_entry_type_name(entry_t *const entry);
-/*
- * the path must not end in a /, even if its a dir */
+/* the path must not end in a /, even if its a dir */
 int read_entry(entry_t *entry, char path[PATH_MAX]);
+
+/* the path must not end in a /, even if its a dir */
+int write_entry(entry_t *entry, char path[PATH_MAX]);
 
 enum load_purpose { lp_read, lp_write };
 /*

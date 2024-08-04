@@ -21,3 +21,10 @@ void const *memcpyy(void *restrict dest, const void *restrict src, size_t len);
 #define ERR(source)                                                      \
 	(perror(source), fprintf(stderr, "%s:%d\n", __FILE__, __LINE__), \
 	 exit(EXIT_FAILURE))
+#define CORE_ERR(source)                                        \
+	do {                                                    \
+		perror(source);                                 \
+		fprintf(stderr, "%s:%d\n", __FILE__, __LINE__); \
+		ret = -1;                                       \
+		goto cleanup;                                   \
+	} while (0)

@@ -38,7 +38,8 @@ static int read_file(entry_t *dst, struct stat *s, const char path[PATH_MAX])
 		return -1;
 	}
 
-	if ((data.map = mmap(NULL, dst->size, PROT_READ, MAP_FILE | MAP_SHARED, data.fd, 0)) == MAP_FAILED) {
+	if ((data.map = mmap(NULL, dst->size, PROT_READ, MAP_FILE | MAP_SHARED,
+			     data.fd, 0)) == MAP_FAILED) {
 		perror("mmap");
 		close(data.fd);
 		return -1;
@@ -47,6 +48,39 @@ static int read_file(entry_t *dst, struct stat *s, const char path[PATH_MAX])
 	dst->data.file = data;
 
 	return 0;
+}
+
+static int write_file(entry_t *src, char path[PATH_MAX])
+{
+	assert(src->type == mt_file);
+	int ret = 0;
+
+	const size_t previous_path_len = strlen(path);
+	strcat(path, "/");
+	strcat(path, src->name);
+
+	struct file_data data = { 0 };
+
+	if ((data.fd = open(path, O_RDWR | O_CREAT | O_APPEND | O_EXCL,
+			    src->data.file.permissions)) < 0)
+		CORE_ERR("open");
+
+	if (ftruncate(data.fd, src->size) < 0)
+		CORE_ERR("ftruncate");
+
+	if ((data.map = mmap(NULL, src->size, PROT_WRITE, MAP_FILE | MAP_SHARED,
+			     data.fd, 0)) == MAP_FAILED)
+		CORE_ERR("mmap");
+
+	src->data.file = data;
+
+cleanup:
+	path[previous_path_len] = 0;
+
+	if (data.fd >= 0)
+		close(data.fd);
+
+	return ret;
 }
 
 static int read_dir(entry_t *dst, struct stat *s, char path[PATH_MAX])
@@ -78,8 +112,9 @@ static int read_dir(entry_t *dst, struct stat *s, char path[PATH_MAX])
 	while ((en = readdir(dir))) {
 		data.inners = realloc(data.inners, ++data.inner_count);
 
-		strcat(path+base_path_len, en->d_name);
-		ret = read_entry(&dst->data.dir.inners[dst->data.dir.inner_count], path);
+		strcat(path + base_path_len, en->d_name);
+		ret = read_entry(
+			&dst->data.dir.inners[dst->data.dir.inner_count], path);
 		path[base_path_len] = 0;
 		if (ret < 0)
 			goto cleanup;
@@ -96,9 +131,33 @@ static int read_dir(entry_t *dst, struct stat *s, char path[PATH_MAX])
 	}
 	dst->size = size;
 
-
 	ret = 0;
 	dst->data.dir = data;
+cleanup:
+	path[previous_path_len] = 0;
+
+	return ret;
+}
+
+static int write_dir(entry_t *src, char path[PATH_MAX])
+{
+	assert(src->type == mt_dir);
+	int ret = 0;
+
+	const size_t previous_path_len = strlen(path);
+	strcat(path, "/");
+	strcat(path, src->name);
+	const size_t base_path_len = strlen(path);
+
+	if (mkdir(path, 0644) < 0)
+		CORE_ERR("mkdir");
+
+	for (size_t i = 0; i < src->data.dir.inner_count; i++) {
+		if (write_entry(src->data.dir.inners + i, path) < 0)
+			CORE_ERR("write_entry");
+		path[base_path_len] = 0;
+	}
+
 cleanup:
 	path[previous_path_len] = 0;
 
@@ -113,18 +172,34 @@ int read_entry(entry_t *entry, char path[PATH_MAX])
 		return -1;
 	}
 
-	if (!S_ISREG(s.st_mode) && !S_ISDIR(s.st_mode)) return -1;
+	if (!S_ISREG(s.st_mode) && !S_ISDIR(s.st_mode))
+		return -1;
 
 	const char *name = basename(path);
-	if (strlen(name) > NAME_MAX) return -1;
+	if (strlen(name) > NAME_MAX)
+		return -1;
 	entry->name = strdup(name);
 
 	switch (s.st_mode & S_IFMT) {
-		case S_IFREG: return read_file(entry, &s, path);
-		case S_IFDIR: return read_dir(entry, &s, path);
+	case S_IFREG:
+		return read_file(entry, &s, path);
+	case S_IFDIR:
+		return read_dir(entry, &s, path);
 	}
 
 	return -1;
+}
+
+int write_entry(entry_t *entry, char path[PATH_MAX])
+{
+	switch (entry->type) {
+	case mt_file:
+		return write_file(entry, path);
+	case mt_dir:
+		return write_dir(entry, path);
+	default:
+		return -1;
+	}
 }
 
 ssize_t total_entry_len(const entry_t *entry)
