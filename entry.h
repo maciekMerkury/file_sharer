@@ -31,7 +31,9 @@ typedef struct entry {
 } entry_t;
 
 char *get_entry_type_name(entry_t *const entry);
-int read_file_data(entry_t *entry, const char *const path);
+/*
+ * the path must not end in a /, even if its a dir */
+int read_entry(entry_t *entry, char path[PATH_MAX]);
 
 ssize_t total_entry_len(const entry_t *entry);
 

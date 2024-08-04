@@ -87,7 +87,7 @@ ssize_t exchange_data_with_socket(int soc, operation op,
 	return sent;
 }
 
-void *memcpyy(void *restrict dest, const void *restrict src, size_t len)
+void const *memcpyy(void *restrict dest, const void *restrict src, size_t len)
 {
 	memcpy(dest, src, len);
 	return (void *)((uintptr_t)src + len);

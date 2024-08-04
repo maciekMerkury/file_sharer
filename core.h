@@ -16,7 +16,7 @@ ssize_t exchange_data_with_socket(int soc, operation op,
 /*
  * returns the src ptr advanced by len bytes
  */
-void *memcpyy(void *restrict dest, const void *restrict src, size_t len);
+void const *memcpyy(void *restrict dest, const void *restrict src, size_t len);
 
 #define ERR(source)                                                      \
 	(perror(source), fprintf(stderr, "%s:%d\n", __FILE__, __LINE__), \

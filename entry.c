@@ -1,15 +1,18 @@
 // the gnu version of the basename function is needed
 #define _GNU_SOURCE
-
-#include <sys/types.h>
+#include <errno.h>
+#include <assert.h>
+#include <linux/limits.h>
 #include "core.h"
 #include "entry.h"
 #include "message.h"
-#include <sys/stat.h>
+#include <dirent.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 char *get_entry_type_name(entry_t *entry)
 {
@@ -17,27 +20,93 @@ char *get_entry_type_name(entry_t *entry)
 }
 
 #define ALL_PERMISSIONS (S_IRWXU | S_IRWXG | S_IRWXO)
-int read_file_data(entry_t *dst, const char *const path)
+static int read_file(entry_t *dst, struct stat *s, const char path[PATH_MAX])
 {
+	assert(S_ISREG(s->st_mode));
+
 	dst->type = mt_file;
-	const char *name = basename(path);
+	dst->size = s->st_size;
+	dst->data.file.permissions = s->st_mode & ALL_PERMISSIONS;
 
-	const int name_len = strlen(name);
-	if (name_len > NAME_MAX)
-		return -1;
+	return 0;
+}
 
-	dst->name = strdup(name);
+static int read_dir(entry_t *dst, struct stat *s, char path[PATH_MAX])
+{
+	dst->type = mt_dir;
+	int ret;
 
+	const size_t previous_path_len = strlen(path);
+	strcat(path, "/");
+	strcat(path, dst->name);
+	strcat(path, "/");
+	const size_t base_path_len = strlen(path);
+
+	DIR *dir = opendir(path);
+
+	if (!dir) {
+		perror("opendir");
+		ret = -1;
+		goto cleanup;
+	}
+
+	struct dir_data data = {
+		.inner_count = 0,
+		.inners = NULL,
+	};
+	struct dirent *en;
+	errno = 0;
+	ret = 0;
+	while ((en = readdir(dir))) {
+		data.inners = realloc(data.inners, ++data.inner_count);
+
+		strcat(path+base_path_len, en->d_name);
+		ret = read_entry(&dst->data.dir.inners[dst->data.dir.inner_count], path);
+		path[base_path_len] = 0;
+		if (ret < 0)
+			goto cleanup;
+	}
+	if (errno != 0) {
+		perror("readdir");
+		ret = -1;
+		goto cleanup;
+	}
+
+	size_t size = 0;
+	for (size_t i = 0; i < data.inner_count; ++i) {
+		size += data.inners[i].size;
+	}
+	dst->size = size;
+
+
+	ret = 0;
+	dst->data.dir = data;
+cleanup:
+	path[previous_path_len] = 0;
+
+	return ret;
+}
+
+int read_entry(entry_t *entry, char path[PATH_MAX])
+{
 	struct stat s;
 	if (stat(path, &s) < 0) {
-		perror("fstat");
+		perror("stat");
 		return -1;
 	}
 
-	dst->size = s.st_size;
-	dst->data.file.permissions = s.st_mode & ALL_PERMISSIONS;
+	if (!S_ISREG(s.st_mode) && !S_ISDIR(s.st_mode)) return -1;
 
-	return 0;
+	const char *name = basename(path);
+	if (strlen(name) > NAME_MAX) return -1;
+	entry->name = strdup(name);
+
+	switch (s.st_mode & S_IFMT) {
+		case S_IFREG: return read_file(entry, &s, path);
+		case S_IFDIR: return read_dir(entry, &s, path);
+	}
+
+	return -1;
 }
 
 ssize_t total_entry_len(const entry_t *entry)

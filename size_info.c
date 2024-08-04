@@ -2,7 +2,7 @@
 #include <stddef.h>
 
 #define UNIT_LEN 4
-static const char size_units[UNIT_LEN][4] = { "B", "kiB", "MiB", "GiB" };
+static const char size_units[UNIT_LEN][4] = { "B", "KiB", "MiB", "GiB" };
 
 size_info bytes_to_size(size_t byte_size)
 {
