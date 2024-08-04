@@ -13,6 +13,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #define CLEANUP(label)              \
@@ -26,15 +27,8 @@
 typedef struct args {
 	in_port_t port;
 	struct in_addr addr;
-	int file_fd;
-	const char *path;
+	char *path;
 } args;
-
-typedef struct file {
-	int fd;
-	void *map;
-	entry_t data;
-} file;
 
 static int read_args(args *a, int argc, char **argv)
 {
@@ -49,33 +43,25 @@ static int read_args(args *a, int argc, char **argv)
 		return -1;
 	}
 
-	if ((a->file_fd = open(argv[2], O_RDONLY)) < 0) {
-		perror("file open");
+	a->path = malloc(PATH_MAX);
+	const size_t len = strlen(argv[2]);
+	memcpy(a->path, argv[2], len+sizeof(char));
+
+	struct stat s;
+	if (stat(a->path, &s) < 0) {
+		perror("stat");
 		return -1;
 	}
-	a->path = argv[2];
+
+	if (!S_ISDIR(s.st_mode) && !S_ISREG(s.st_mode)) {
+		fprintf(stderr, "only regular files and directories are supported\n");
+		return -1;
+	}
 
 	if (argc == 4)
 		a->port = htons(atoi(argv[3]));
 	else
 		a->port = htons(DEFAULT_PORT);
-
-	return 0;
-}
-
-static int read_file(file *f, int fd, const char *const path)
-{
-#pragma message "actually support dirs"
-
-	f->fd = fd;
-	if (read_file_data(&f->data, path) < 0)
-		return -1;
-
-	if ((f->map = mmap(NULL, f->data.size, PROT_READ, MAP_FILE | MAP_SHARED,
-			   fd, 0)) == MAP_FAILED) {
-		perror("mmap");
-		return -1;
-	}
 
 	return 0;
 }
@@ -186,19 +172,18 @@ data_cleanup:
 }
 
 /* will do all the cleanup necessary */
-static int client_main(in_port_t port, struct in_addr addr, int file_fd,
-		       const char *const file_path)
+static int client_main(in_port_t port, struct in_addr addr, char *file_path)
 {
 	int ret = EXIT_SUCCESS;
-	file f;
-	if (read_file(&f, file_fd, file_path) < 0)
+	entry_t base;
+	if (read_entry(&base, file_path) < 0)
 		return EXIT_FAILURE;
 
 	int server;
 	if (server_connect(&server, addr, port) != 0)
 		CLEANUP(file_cleanup);
 
-	switch (send_metadata(server, &f.data)) {
+	switch (send_metadata(server, &base)) {
 	case 0:
 		printf("server accepted\n");
 		break;
@@ -215,12 +200,12 @@ static int client_main(in_port_t port, struct in_addr addr, int file_fd,
 		exit(21);
 	}
 
-	size_info size = bytes_to_size(f.data.size);
-	printf("sending %s, size %.2lf%s\n", f.data.name, size.size,
+	size_info size = bytes_to_size(base.size);
+	printf("sending %s, size %.2lf%s\n", base.name, size.size,
 	       unit(size));
 
 	progress_bar_t bar;
-	prog_bar_init(&bar, f.data.name, f.data.size,
+	prog_bar_init(&bar, base.name, base.size,
 		      (struct timespec){ .tv_nsec = 500e6 });
 
 	ssize_t l = send_all(f.map, f.data.size, server, &bar);
@@ -234,9 +219,9 @@ server_cleanup:
 	shutdown(server, SHUT_RDWR);
 	close(server);
 file_cleanup:
-	munmap(f.map, f.data.size);
-	close(f.fd);
-	entry_deallocate(&f.data);
+	entry_deallocate(&base);
+
+	free(file_path);
 
 	return ret;
 }
@@ -247,5 +232,5 @@ int main(int argc, char **argv)
 	if (read_args(&a, argc, argv) < 0)
 		return EXIT_FAILURE;
 
-	return client_main(a.port, a.addr, a.file_fd, a.path);
+	return client_main(a.port, a.addr, a.path);
 }
