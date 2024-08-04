@@ -1,4 +1,6 @@
 #define _GNU_SOURCE
+#include <sys/mman.h>
+#include <unistd.h>
 #include <errno.h>
 #include <assert.h>
 #include <linux/limits.h>
@@ -25,7 +27,23 @@ static int read_file(entry_t *dst, struct stat *s, const char path[PATH_MAX])
 
 	dst->type = mt_file;
 	dst->size = s->st_size;
-	dst->data.file.permissions = s->st_mode & ALL_PERMISSIONS;
+
+	struct file_data data = {
+		.permissions = s->st_mode & ALL_PERMISSIONS,
+	};
+
+	if ((data.fd = open(path, O_RDONLY)) < 0) {
+		perror("open");
+		return -1;
+	}
+
+	if ((data.map = mmap(NULL, dst->size, PROT_READ, MAP_FILE | MAP_SHARED, data.fd, 0)) == MAP_FAILED) {
+		perror("mmap");
+		close(data.fd);
+		return -1;
+	}
+
+	dst->data.file = data;
 
 	return 0;
 }
@@ -230,8 +248,11 @@ void entry_deallocate(const entry_t *entry)
 {
 	free(entry->name);
 
-	if (entry->type == mt_file)
+	if (entry->type == mt_file) {
+		munmap(entry->data.file.map, entry->size);
+		close(entry->data.file.fd);
 		return;
+	}
 
 	const size_t ic = entry->data.dir.inner_count;
 	const entry_t *inners = entry->data.dir.inners;

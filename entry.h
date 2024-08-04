@@ -21,6 +21,9 @@ typedef struct entry {
 	union {
 		struct file_data {
 			mode_t permissions;
+			int fd;
+			/* size of this is mmap is `size` */
+			void *map;
 		} file;
 
 		struct dir_data {
@@ -34,6 +37,11 @@ char *get_entry_type_name(entry_t *const entry);
 /*
  * the path must not end in a /, even if its a dir */
 int read_entry(entry_t *entry, char path[PATH_MAX]);
+
+enum load_purpose { lp_read, lp_write };
+/*
+ * open and mmaps the files (not dirs) */
+int load_entries(entry_t *entry, enum load_purpose purpose);
 
 ssize_t total_entry_len(const entry_t *entry);
 
