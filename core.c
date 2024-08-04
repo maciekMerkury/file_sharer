@@ -76,7 +76,7 @@ ssize_t send_all(const void *const restrict buf, size_t len, int soc,
 	return sent;
 }
 
-void *memcpyy(void *restrict dest, const void *restrict src, size_t len)
+void const *memcpyy(void *restrict dest, const void *restrict src, size_t len)
 {
 	memcpy(dest, src, len);
 	return (void *)((uintptr_t)src + len);
