@@ -7,9 +7,12 @@
 #include <sys/types.h>
 
 #define DEFAULT_POLL_TIMEOUT (1000)
-ssize_t send_all(const void *const buf, size_t len, int soc,
-		 progress_bar_t *prog_bar);
 
+typedef enum operation { op_read, op_write } operation;
+
+ssize_t exchange_data_with_socket(int soc, operation op,
+				  const void *const restrict buf, size_t len,
+				  progress_bar_t *const restrict prog_bar);
 /*
  * returns the src ptr advanced by len bytes
  */

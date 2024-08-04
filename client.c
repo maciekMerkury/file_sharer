@@ -109,11 +109,13 @@ static int server_connect(int *dst_soc, struct in_addr addr, in_port_t port)
 
 	message_type type = mt_hello;
 
-	if ((ret = send_all(&type, sizeof(message_type), soc, NULL)) < 0)
+	if ((ret = exchange_data_with_socket(soc, op_write, &type,
+					     sizeof(message_type), NULL)) < 0)
 		goto hello_cleanup;
 
-	if ((ret = send_all(hello, sizeof(hello_data_t) + hello->username_len,
-			    soc, NULL)) < 0)
+	if ((ret = exchange_data_with_socket(
+		     soc, op_write, hello,
+		     sizeof(hello_data_t) + hello->username_len, NULL)) < 0)
 		goto hello_cleanup;
 
 	if ((ret = recv(soc, &type, sizeof(message_type), 0)) < 0)
@@ -159,10 +161,12 @@ static int send_metadata(int soc, const entry_t *entry)
 		goto data_cleanup;
 	}
 
-	if ((ret = send_all(&len, sizeof(size_t), soc, NULL)) < 0)
+	if ((ret = exchange_data_with_socket(soc, op_write, &len,
+					     sizeof(size_t), NULL)) < 0)
 		goto data_cleanup;
 
-	if ((ret = send_all(dat, len, soc, NULL)) < 0)
+	if ((ret = exchange_data_with_socket(soc, op_write, dat, len, NULL)) <
+	    0)
 		goto data_cleanup;
 
 	// this is ugly
@@ -223,7 +227,8 @@ static int client_main(in_port_t port, struct in_addr addr, int file_fd,
 	prog_bar_init(&bar, f.data.name, f.data.size,
 		      (struct timespec){ .tv_nsec = 500e6 });
 
-	ssize_t l = send_all(f.map, f.data.size, server, &bar);
+	ssize_t l = exchange_data_with_socket(server, op_write, f.map,
+					      f.data.size, &bar);
 	assert(l == f.data.size);
 	if (l < 0) {
 		perror("sending file");
