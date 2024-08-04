@@ -1,3 +1,4 @@
+// the gnu version of the basename function is needed
 #define _GNU_SOURCE
 #include <sys/mman.h>
 #include <unistd.h>

@@ -1,5 +1,3 @@
-// the gnu version of the basename function is needed
-#define _GNU_SOURCE
 #include "core.h"
 #include "progress_bar.h"
 #include <assert.h>
@@ -15,14 +13,26 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-ssize_t send_all(const void *const restrict buf, size_t len, int soc,
-		 progress_bar_t *const restrict prog_bar)
+#define SOCKET_OPERATION(op, ret, ...)           \
+	do {                                     \
+		if (op == op_read) {             \
+			ret = recv(__VA_ARGS__); \
+		} else {                         \
+			ret = send(__VA_ARGS__); \
+		}                                \
+	} while (0);
+
+ssize_t exchange_data_with_socket(int soc, operation op,
+				  const void *const restrict buf, size_t len,
+				  progress_bar_t *const restrict prog_bar)
 {
+	int event = op_read ? POLLIN : POLLOUT;
+
 	ssize_t sent = 0;
 	int old_flags = 0;
 	struct pollfd p = {
 		.fd = soc,
-		.events = POLLIN,
+		.events = event,
 	};
 
 	if (prog_bar) {
@@ -38,7 +48,8 @@ ssize_t send_all(const void *const restrict buf, size_t len, int soc,
 
 	ssize_t s;
 	while (sent < len) {
-		s = send(soc, (void *)((uintptr_t)buf + sent), len - sent, 0);
+		SOCKET_OPERATION(op, s, soc, (void *)((uintptr_t)buf + sent),
+				 len - sent, 0);
 		if (s < 0) {
 			if (errno != EWOULDBLOCK) {
 				perror("send");

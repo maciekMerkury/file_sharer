@@ -6,14 +6,14 @@
 
 typedef struct entry {
 	/*
-         * can only be mt_file or mt_dir
-         */
+     * can only be mt_file or mt_dir
+     */
 	message_type type;
 	/*
-        * total size, sans this metadata
-        * for files, its just the size
-        * for directories, its the total size of all the data (sort of like du -d0 <name>)
-        */
+    * total size, sans this metadata
+    * for files, its just the size
+    * for directories, its the total size of all the data (sort of like du -d0 <name>)
+    */
 	size_t size;
 
 	char *name;
