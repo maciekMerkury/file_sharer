@@ -54,11 +54,13 @@ static int read_dir(entry_t *dst, struct stat *s, char path[PATH_MAX])
 	dst->type = mt_dir;
 	int ret;
 
+	printf("p: %s\t", path);
 	const size_t previous_path_len = strlen(path);
-	strcat(path, "/");
-	strcat(path, dst->name);
-	strcat(path, "/");
+//	strcat(path, "/");
+//	strcat(path, dst->name);
+//	strcat(path, "/");
 	const size_t base_path_len = strlen(path);
+	printf("p2: %s\n", path);
 
 	DIR *dir = opendir(path);
 
@@ -79,7 +81,7 @@ static int read_dir(entry_t *dst, struct stat *s, char path[PATH_MAX])
 		data.inners = realloc(data.inners, ++data.inner_count);
 
 		strcat(path+base_path_len, en->d_name);
-		ret = read_entry(&dst->data.dir.inners[dst->data.dir.inner_count], path);
+		ret = read_entry(data.inners + data.inner_count, path);
 		path[base_path_len] = 0;
 		if (ret < 0)
 			goto cleanup;
@@ -95,7 +97,6 @@ static int read_dir(entry_t *dst, struct stat *s, char path[PATH_MAX])
 		size += data.inners[i].size;
 	}
 	dst->size = size;
-
 
 	ret = 0;
 	dst->data.dir = data;
@@ -115,7 +116,12 @@ int read_entry(entry_t *entry, char path[PATH_MAX])
 
 	if (!S_ISREG(s.st_mode) && !S_ISDIR(s.st_mode)) return -1;
 
+	const size_t path_len = strlen(path);
+	if (path[path_len - 1] == '/' ) path[path_len - 1] = 0;
+	printf("p: %s\t", path);
 	const char *name = basename(path);
+	printf("n: %s\n", name);
+	if (S_ISDIR(s.st_mode)) path[path_len - 1] = '/';
 	if (strlen(name) > NAME_MAX) return -1;
 	entry->name = strdup(name);
 

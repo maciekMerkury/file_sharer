@@ -33,6 +33,8 @@ typedef struct entry {
 	} data;
 } entry_t;
 
+
+
 char *get_entry_type_name(entry_t *const entry);
 /*
  * the path must not end in a /, even if its a dir */
@@ -42,7 +44,6 @@ enum load_purpose { lp_read, lp_write };
 /*
  * open and mmaps the files (not dirs) */
 int load_entries(entry_t *entry, enum load_purpose purpose);
-
 ssize_t total_entry_len(const entry_t *entry);
 
 /* if `dst` is NULL, `len` is disregarded, and new memory is allocated
