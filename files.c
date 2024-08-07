@@ -50,10 +50,8 @@ static int fn(const char *path, const struct stat *s, int flags, struct FTW *f)
 
 int create_files(const char *path, files_t *f)
 {
+	*f = (files_t){ 0 };
 	files = f;
-	files->total_file_size = 0;
-	files->files_size = 0;
-	files->files = NULL;
 
 	if (nftw(path, &fn, MAX_FD, 0) < 0) {
 		free(files);
@@ -81,4 +79,23 @@ file_t *next_file(const file_t *file)
 file_t *end_files(const files_t *files)
 {
 	return (file_t *)((uintptr_t)files->files + files->files_size);
+}
+
+void files_iter_init(files_iter *it, const files_t *files)
+{
+	it->curr = files->files;
+	it->end = (file_t *)((uintptr_t)files->files + files->files_size);
+}
+
+file_t *files_iter_next(files_iter *it)
+{
+	file_t *curr = it->curr;
+
+	if (curr >= it->end)
+		return NULL;
+
+	it->curr =
+		(file_t *)((uintptr_t)curr + sizeof(file_t) + curr->path_size);
+
+	return curr;
 }
