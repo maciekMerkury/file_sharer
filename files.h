@@ -37,10 +37,6 @@ void destroy_files(files_t *files);
 void files_iter_init(files_iter *it, const files_t *files);
 file_t *files_iter_next(files_iter *it);
 
-file_t *begin_files(const files_t *files);
-file_t *next_file(const file_t *file);
-file_t *end_files(const files_t *files);
-
 typedef struct file_data {
 	int fd;
 	void *map;
