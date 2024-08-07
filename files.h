@@ -1,3 +1,4 @@
+#pragma once
 #include <sys/types.h>
 
 typedef enum file_type { ft_reg, ft_dir } file_type;
@@ -21,18 +22,19 @@ typedef struct files {
 
 	/* null-terminated */
 	char *parent_dir;
+	char *root_dir_base;
 
 	size_t files_size;
 	file_t *files;
 } files_t;
 
+int create_files(const char *path, files_t *files);
+void destroy_files(files_t *files);
+
 typedef struct {
 	file_t *curr;
 	const file_t *end;
 } files_iter;
-
-int create_files(const char *path, files_t *files);
-void destroy_files(files_t *files);
 
 void files_iter_init(files_iter *it, const files_t *files);
 file_t *files_iter_next(files_iter *it);

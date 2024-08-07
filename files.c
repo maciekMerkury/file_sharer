@@ -11,14 +11,8 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
+#include "core.h"
 #include "files.h"
-
-#define ERR(source)                                             \
-	do {                                                    \
-		perror(source);                                 \
-		fprintf(stderr, "%s:%d\n", __FILE__, __LINE__); \
-		goto error;                                     \
-	} while (0)
 
 #define MAX_FD 20
 
@@ -31,11 +25,11 @@ static files_t *files;
 static int fn(const char *path, const struct stat *s, int flags, struct FTW *f)
 {
 	if (files->parent_dir == NULL) {
-		if ((files->parent_dir = malloc(f->base + 1)) == NULL)
-			ERR("malloc");
+		if ((files->parent_dir = strdup(path)) == NULL)
+			CORE_ERR("strdup");
 
-		memcpy(files->parent_dir, path, f->base);
 		files->parent_dir[f->base] = '\0';
+		files->root_dir_base = &files->parent_dir[f->base + 1];
 	}
 
 	if (flags != FTW_F && flags != FTW_D) {
@@ -77,7 +71,7 @@ int create_files(const char *path, files_t *f)
 	files = f;
 
 	if (nftw(path, &fn, MAX_FD, 0) < 0)
-		ERR("nftw");
+		CORE_ERR("nftw");
 
 	files->files[0].size = files->total_file_size;
 
@@ -127,11 +121,11 @@ int open_and_map_file(file_t *file, file_data_t *file_data,
 	file_data->size = file->size;
 
 	if ((file_data->fd = open(file->path, open_flags)) < 0)
-		ERR("open");
+		CORE_ERR("open");
 	if ((file_data->map = mmap(NULL, file_data->size, map_flags,
 				   MAP_FILE | MAP_SHARED, file_data->fd, 0)) ==
 	    MAP_FAILED)
-		ERR("mmap");
+		CORE_ERR("mmap");
 
 	return 0;
 
