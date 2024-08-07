@@ -29,7 +29,7 @@ static int read_file(entry_t *dst, struct stat *s, const char path[PATH_MAX])
 	dst->type = mt_file;
 	dst->size = s->st_size;
 
-	struct file_data data = {
+	struct file_meta_data data = {
 		.permissions = s->st_mode & ALL_PERMISSIONS,
 	};
 
@@ -59,7 +59,7 @@ static int write_file(entry_t *src, char path[PATH_MAX])
 	strcat(path, "/");
 	strcat(path, src->name);
 
-	struct file_data data = { 0 };
+	struct file_meta_data data = { 0 };
 
 	if ((data.fd = open(path, O_RDWR | O_CREAT | O_APPEND | O_EXCL,
 			    src->data.file.permissions)) < 0)
@@ -74,7 +74,7 @@ static int write_file(entry_t *src, char path[PATH_MAX])
 
 	src->data.file = data;
 
-cleanup:
+error:
 	path[previous_path_len] = 0;
 
 	if (data.fd >= 0)
@@ -159,7 +159,7 @@ static int write_dir(entry_t *src, char path[PATH_MAX])
 		path[base_path_len] = 0;
 	}
 
-cleanup:
+error:
 	path[previous_path_len] = 0;
 
 	return ret;

@@ -73,8 +73,6 @@ int create_files(const char *path, files_t *f)
 	if (nftw(path, &fn, MAX_FD, 0) < 0)
 		CORE_ERR("nftw");
 
-	files->files[0].size = files->total_file_size;
-
 	return 0;
 
 error:

@@ -90,13 +90,14 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
 /* also performs the handshake, etc */
 static int server_connect(int *dst_soc, struct in_addr addr, in_port_t port)
 {
-	int soc, ret;
+	int soc, ret = 0;
 
 	if ((soc = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
 		perror("socket");
 		return -1;
 	}
 
+	/*
 	struct sockaddr_in target = {
 		.sin_addr = addr,
 		.sin_family = AF_INET,
@@ -149,6 +150,7 @@ soc_cleanup:
 		*dst_soc = soc;
 	else
 		close(soc);
+	*/
 	return ret;
 }
 
@@ -215,7 +217,7 @@ static int client_main(in_port_t port, struct in_addr addr, char *file_path)
 	}
 	puts("done");
 
-	free(fs.files);
+	destroy_files(&fs);
 	free(file_path);
 	return 0;
 
