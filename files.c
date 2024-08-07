@@ -95,21 +95,6 @@ void destroy_files(files_t *files)
 	free(files->files);
 }
 
-file_t *begin_files(const files_t *files)
-{
-	return files->files;
-}
-
-file_t *next_file(const file_t *file)
-{
-	return (file_t *)((uintptr_t)file + sizeof(file_t) + file->path_size);
-}
-
-file_t *end_files(const files_t *files)
-{
-	return (file_t *)((uintptr_t)files->files + files->files_size);
-}
-
 void files_iter_init(files_iter *it, const files_t *files)
 {
 	it->curr = files->files;
