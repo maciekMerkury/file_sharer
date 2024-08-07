@@ -17,18 +17,23 @@ char *get_file_type_name(file_t *file)
 }
 
 static files_t *files;
+static ssize_t skip_path_len = -1;
 static int fn(const char *path, const struct stat *s, int flags, struct FTW *f)
 {
+	if (skip_path_len == -1) {
+		skip_path_len = f->base;
+	}
+
 	if (flags != FTW_F && flags != FTW_D) {
 		fprintf(stderr,
-			"file `%s` is an unsupported file type"
+			"file `%s` is an unsupported file type "
 			"or an error occurred while reading it",
 			path);
 		return 0;
 	}
 
 	const size_t old_size = files->files_size;
-	const size_t path_len = strlen(path) + 1;
+	const size_t path_len = strlen(path) + 1 - skip_path_len;
 	const size_t alignment = alignof(file_t) - path_len % alignof(file_t);
 	const size_t path_size = path_len + alignment;
 	const size_t struct_size = sizeof(file_t) + path_size;
@@ -39,17 +44,18 @@ static int fn(const char *path, const struct stat *s, int flags, struct FTW *f)
 
 	new_file->type = flags == FTW_F ? ft_reg : ft_dir;
 	new_file->permissions = s->st_mode;
-	new_file->size = s->st_size;
+	new_file->size = flags == FTW_F ? s->st_size : 0;
 	new_file->path_size = path_size;
-	memcpy(new_file->path, path, path_len);
+	memcpy(new_file->path, path + skip_path_len, path_len);
 
-	files->total_file_size += s->st_size;
+	files->total_file_size += new_file->size;
 
 	return 0;
 }
 
 int create_files(const char *path, files_t *f)
 {
+	skip_path_len = -1;
 	files = f;
 	files->total_file_size = 0;
 	files->files_size = 0;
@@ -59,6 +65,8 @@ int create_files(const char *path, files_t *f)
 		free(files);
 		return -1;
 	}
+
+	files->files[0].size = files->total_file_size;
 
 	return 0;
 }

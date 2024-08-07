@@ -8,6 +8,7 @@ typedef struct file {
 	off_t size;
 
 	/* includes the null byte */
+	/* contains alignment padding */
 	size_t path_size;
 	char path[];
 } file_t;
