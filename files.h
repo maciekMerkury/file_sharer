@@ -9,6 +9,7 @@ typedef struct file {
 
 	/* includes the null byte */
 	/* contains alignment padding */
+	/* relative to files_t.parent_dir */
 	size_t path_size;
 	char path[];
 } file_t;
@@ -16,7 +17,10 @@ typedef struct file {
 char *get_file_type_name(file_t *file);
 
 typedef struct files {
-	off_t total_file_size;	
+	off_t total_file_size;
+
+	/* null-terminated */
+	char *parent_dir;
 
 	size_t files_size;
 	file_t *files;
@@ -27,4 +31,17 @@ void destroy_files(files_t *files);
 
 file_t *begin_files(const files_t *files);
 file_t *next_file(const file_t *file);
-file_t *end_files(const files_t* files);
+file_t *end_files(const files_t *files);
+
+typedef struct file_data {
+	int fd;
+	void *map;
+	size_t size;
+} file_data_t;
+
+typedef enum file_operation { fo_read, fo_write } file_operation;
+
+/* chdir to files_t.parent_dir before running */
+int open_and_map_file(file_t *file, file_data_t *file_data,
+		      file_operation operation);
+void destroy_file_data(file_data_t *file_data);
