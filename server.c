@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <argp.h>
 #include <poll.h>
 #include <linux/limits.h>
 #include <dirent.h>
@@ -152,8 +153,8 @@ bool confirm_transfer(client_t *client, entry_t *entry, char path[PATH_MAX])
 	return c == 'y' || c == 'Y' || c == '\n';
 }
 
-void recv_file_data(client_t *client, size_t size, struct file_data file_data,
-		    char path[PATH_MAX])
+void recv_file_data(client_t *client, size_t size,
+		    struct file_meta_data file_data, char path[PATH_MAX])
 {
 	int fd;
 	if ((fd = open(path, O_RDWR | O_CREAT | O_APPEND | O_EXCL,
@@ -223,21 +224,64 @@ void usage(char *prog)
 	exit(EXIT_FAILURE);
 }
 
+typedef struct {
+	int parsed;
+	char *const downloads_dir;
+	in_port_t port;
+} args;
+
+static error_t parse_opt(int key, char *arg, struct argp_state *state)
+{
+	args *a = state->input;
+	switch (key) {
+	case ARGP_KEY_ARG:
+		switch (a->parsed++) {
+		case 0:
+			a->port = atoi(arg);
+			break;
+		case 1:
+			// this should probably handle errors
+			realpath(arg, a->downloads_dir);
+			{
+				DIR *dir = opendir(a->downloads_dir);
+				if (!dir)
+					ERR("opendir");
+				if (closedir(dir) < 0)
+					ERR("closedir");
+			}
+			break;
+		default:
+			argp_usage(state);
+		}
+		break;
+	case ARGP_KEY_END:
+		if (a->parsed < 2)
+			argp_usage(state);
+		break;
+	default:
+		return ARGP_ERR_UNKNOWN;
+	};
+	return 0;
+}
+
 void read_args(int argc, char *argv[], uint16_t *port,
 	       char downloads_directory[PATH_MAX])
 {
-	if (argc < 3)
-		usage(argv[0]);
+	const char *const args_doc = "PORT DOWNLOAD_PATH";
+	const struct argp_option options[] = { 0 };
+	const struct argp argp = {
+		.options = options,
+		.args_doc = args_doc,
+		.parser = parse_opt,
+	};
+	args a = { .parsed = 0, .downloads_dir = downloads_directory };
 
-	*port = atoi(argv[1]);
+	if (argp_parse(&argp, argc, argv, 0, NULL, &a) < 0) {
+		fprintf(stderr, "parsing error :(");
+		exit(EXIT_FAILURE);
+	}
 
-	realpath(argv[2], downloads_directory);
-
-	DIR *dir;
-	if ((dir = opendir(downloads_directory)) == NULL)
-		ERR("opendir");
-	if (closedir(dir) < 0)
-		ERR("closedir");
+	*port = a.port;
 }
 
 int main(int argc, char *argv[])

@@ -1,8 +1,10 @@
 #include "core.h"
+#include "files.h"
 #include "entry.h"
 #include "message.h"
 #include "progress_bar.h"
 #include "size_info.h"
+#include <argp.h>
 #include <arpa/inet.h>
 #include <assert.h>
 #include <fcntl.h>
@@ -23,46 +25,65 @@
 	} while (0)
 
 #define DEFAULT_PORT 2137
+#define STRINGIFY(macro) ANOTHERSTRING(macro)
+#define ANOTHERSTRING(macro) #macro
 
 typedef struct args {
+	int parsed;
 	in_port_t port;
 	struct in_addr addr;
 	char *path;
 } args;
 
-static int read_args(args *a, int argc, char **argv)
+static inline int parse_path(args *restrict a, const char *path)
 {
-	if (argc < 3) {
-		printf("USAGE: %s IPv4 FILE_PATH [PORT]\n", argv[0]);
+	a->path = malloc(PATH_MAX);
+	if (!a->path)
 		return -1;
-	}
+	strcpy(a->path, path);
+	return 0;
+}
 
-	if (inet_pton(AF_INET, argv[1], &a->addr) < 0) {
-		fprintf(stderr, "ip: %s\t", argv[1]);
+static inline int parse_addr(args *restrict a, const char *arg)
+{
+	if (inet_pton(AF_INET, arg, &a->addr) < 0) {
+		fprintf(stderr, "ip: %s\t", arg);
 		perror("");
 		return -1;
 	}
 
-	a->path = malloc(PATH_MAX);
-	const size_t len = strlen(argv[2]);
-	memcpy(a->path, argv[2], len+sizeof(char));
+	return 0;
+}
 
-	struct stat s;
-	if (stat(a->path, &s) < 0) {
-		perror("stat");
-		return -1;
+static error_t parse_opt(int key, char *arg, struct argp_state *state)
+{
+	args *a = state->input;
+
+	switch (key) {
+	case 'p':
+		a->port = htons(atoi(arg));
+		break;
+	case ARGP_KEY_ARG:
+		switch (a->parsed++) {
+		case 0:
+			if (parse_addr(a, arg) < 0)
+				exit(EXIT_FAILURE);
+			break;
+		case 1:
+			if (parse_path(a, arg) < 0)
+				exit(EXIT_FAILURE);
+			break;
+		default:
+			argp_usage(state);
+		}
+		break;
+	case ARGP_KEY_END:
+		if (a->parsed < 2)
+			argp_usage(state);
+		break;
+	default:
+		return ARGP_ERR_UNKNOWN;
 	}
-
-	if (!S_ISDIR(s.st_mode) && !S_ISREG(s.st_mode)) {
-		fprintf(stderr, "only regular files and directories are supported\n");
-		return -1;
-	}
-
-	if (argc == 4)
-		a->port = htons(atoi(argv[3]));
-	else
-		a->port = htons(DEFAULT_PORT);
-
 	return 0;
 }
 
@@ -178,6 +199,26 @@ data_cleanup:
 /* will do all the cleanup necessary */
 static int client_main(in_port_t port, struct in_addr addr, char *file_path)
 {
+	files_t fs;
+	if (create_files(file_path, &fs) < 0) {
+		fprintf(stderr, "poopoo");
+		perror("\tcreate_files");
+	}
+
+	files_iter it;
+	files_iter_init(&it, &fs);
+	file_t *f;
+
+	puts("start");
+	while ((f = files_iter_next(&it))) {
+		printf("%s\n", f->path);
+	}
+	puts("done");
+
+	free(fs.files);
+	free(file_path);
+	return 0;
+
 	int ret = EXIT_SUCCESS;
 	entry_t base;
 	if (read_entry(&base, file_path) < 0)
@@ -212,6 +253,7 @@ static int client_main(in_port_t port, struct in_addr addr, char *file_path)
 	prog_bar_init(&bar, base.name, base.size,
 		      (struct timespec){ .tv_nsec = 500e6 });
 
+	/*
 	ssize_t l = exchange_data_with_socket(server, op_write, f.map,
 					      f.data.size, &bar);
 	assert(l == f.data.size);
@@ -219,6 +261,7 @@ static int client_main(in_port_t port, struct in_addr addr, char *file_path)
 		perror("sending file");
 		CLEANUP(server_cleanup);
 	}
+	*/
 
 server_cleanup:
 	shutdown(server, SHUT_RDWR);
@@ -233,9 +276,30 @@ file_cleanup:
 
 int main(int argc, char **argv)
 {
-	args a;
-	if (read_args(&a, argc, argv) < 0)
+	const char *const args_doc = "IPv4 PATH";
+	const struct argp_option options[] = {
+		{ "port", 'p', "PORT", 0,
+		  "change the server port from default (" STRINGIFY(
+			  DEFAULT_PORT) ")" },
+		{ 0 }
+	};
+
+	const struct argp arg_parser = {
+		.options = options,
+		.args_doc = args_doc,
+		.parser = parse_opt,
+	};
+
+	args a = {
+		.port = DEFAULT_PORT,
+	};
+
+	if (argp_parse(&arg_parser, argc, argv, 0, NULL, &a) < 0) {
 		return EXIT_FAILURE;
+	}
+
+	printf("addr: %s, path: %s, port: %u\n", inet_ntoa(a.addr), a.path,
+	       a.port);
 
 	return client_main(a.port, a.addr, a.path);
 }

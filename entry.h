@@ -19,7 +19,7 @@ typedef struct entry {
 	char *name;
 
 	union {
-		struct file_data {
+		struct file_meta_data {
 			mode_t permissions;
 			int fd;
 			/* size of this is mmap is `size` */
