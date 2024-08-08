@@ -28,7 +28,7 @@ static int fn(const char *path, const struct stat *s, int flags, struct FTW *f)
 		if ((files->parent_dir = strdup(path)) == NULL)
 			CORE_ERR("strdup");
 
-		files->parent_dir[f->base-1] = '\0';
+		files->parent_dir[f->base - 1] = '\0';
 		files->root_dir_base = &files->parent_dir[f->base];
 	}
 
@@ -51,7 +51,7 @@ static int fn(const char *path, const struct stat *s, int flags, struct FTW *f)
 	files->files = realloc(files->files, files->files_size);
 	file_t *new_file = (file_t *)(((uintptr_t)files->files) + old_size);
 
-	*new_file = (file_t) {
+	*new_file = (file_t){
 		.type = flags == FTW_F ? ft_reg : ft_dir,
 		.permissions = s->st_mode,
 		.size = flags == FTW_F ? s->st_size : 0,
@@ -97,7 +97,7 @@ void files_iter_init(files_iter *it, const files_t *files)
 
 void files_iter_special_init(files_iter *it, file_t *curr, size_t size)
 {
-	*it = (files_iter) {
+	*it = (files_iter){
 		.curr = curr,
 		.end = (file_t *)((uintptr_t)curr + size),
 	};
@@ -128,7 +128,7 @@ int open_and_map_file(file_t *file, file_data_t *file_data,
 
 	file_data->size = file->size;
 
-	if ((file_data->fd = open(file->path, open_flags)) < 0)
+	if ((file_data->fd = open(file->path, open_flags, file->permissions)) < 0)
 		CORE_ERR("open");
 	if ((file_data->map = mmap(NULL, file_data->size, map_flags,
 				   MAP_FILE | MAP_SHARED, file_data->fd, 0)) ==
