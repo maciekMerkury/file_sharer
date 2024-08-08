@@ -92,3 +92,38 @@ void const *memcpyy(void *restrict dest, const void *restrict src, size_t len)
 	memcpy(dest, src, len);
 	return (void *)((uintptr_t)src + len);
 }
+
+int send_msg(int soc, header_t *h, void *data)
+{
+	if (exchange_data_with_socket(soc, op_write, h, sizeof(header_t),
+				      NULL) < 0)
+		return -1;
+
+	if (exchange_data_with_socket(soc, op_write, data, h->data_size, NULL) <
+	    0)
+		return -1;
+
+	return 0;
+}
+
+int receive_msg(int soc, header_t *restrict h, void *restrict *data)
+{
+	if (exchange_data_with_socket(soc, op_read, h, sizeof(header_t), NULL) <
+	    0)
+		return -1;
+
+	*data = realloc(*data, h->data_size);
+
+	if (!*data) {
+		perror("realloc");
+		return -1;
+	}
+
+	if (exchange_data_with_socket(soc, op_read, *data, h->data_size, NULL) <
+	    0) {
+		free(*data);
+		return -1;
+	}
+
+	return 0;
+}

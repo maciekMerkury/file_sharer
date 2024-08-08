@@ -24,10 +24,6 @@
 		goto label;         \
 	} while (0)
 
-#define DEFAULT_PORT 2137
-#define STRINGIFY(macro) ANOTHERSTRING(macro)
-#define ANOTHERSTRING(macro) #macro
-
 typedef struct args {
 	int parsed;
 	in_port_t port;
@@ -87,20 +83,6 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
 	return 0;
 }
 
-static int send_msg(int soc, header_t *h, void *data,
-		    progress_bar_t *const restrict prog_bar)
-{
-	if (exchange_data_with_socket(soc, op_write, h, sizeof(header_t),
-				      prog_bar) < 0)
-		return -1;
-
-	if (exchange_data_with_socket(soc, op_write, data, h->data_size,
-				      prog_bar) < 0)
-		return -1;
-
-	return 0;
-}
-
 /* also performs the handshake, etc */
 static int server_connect(int *dst_soc, struct in_addr addr, in_port_t port)
 {
@@ -133,7 +115,7 @@ static int server_connect(int *dst_soc, struct in_addr addr, in_port_t port)
 	}
 
 	puts("send_msg");
-	if (send_msg(soc, &header, data, NULL) < 0) {
+	if (send_msg(soc, &header, data) < 0) {
 		ret = -1;
 		goto hello_cleanup;
 	}
@@ -198,7 +180,7 @@ static int send_metadata(int soc, const files_t *metadata)
 
 	int ret = 0;
 
-	if ((ret = send_msg(soc, &h, data, NULL)) < 0)
+	if ((ret = send_msg(soc, &h, data)) < 0)
 		GOTO(data_cleanup);
 
 	puts("waiting for req ack");
@@ -224,7 +206,7 @@ static int send_metadata(int soc, const files_t *metadata)
 
 	create_metadata_header(&h, metadata);
 
-	if ((ret = send_msg(soc, &h, metadata->files, NULL)) < 0)
+	if ((ret = send_msg(soc, &h, metadata->files)) < 0)
 		GOTO(data_cleanup);
 
 	puts("waiting for metadata ack");
