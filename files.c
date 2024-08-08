@@ -28,8 +28,8 @@ static int fn(const char *path, const struct stat *s, int flags, struct FTW *f)
 		if ((files->parent_dir = strdup(path)) == NULL)
 			CORE_ERR("strdup");
 
-		files->parent_dir[f->base] = '\0';
-		files->root_dir_base = &files->parent_dir[f->base + 1];
+		files->parent_dir[f->base-1] = '\0';
+		files->root_dir_base = &files->parent_dir[f->base];
 	}
 
 	if (flags != FTW_F && flags != FTW_D) {
