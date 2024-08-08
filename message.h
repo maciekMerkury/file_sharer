@@ -14,12 +14,12 @@ typedef enum __attribute__((__packed__)) message_type {
 	mt_meta,
 } message_type;
 
-static const char *const default_user_name = "(???)";
+static const char default_user_name[] = "(???)";
 
-typedef struct headers {
+typedef struct header {
 	message_type type;
 	size_t data_size;
-} headers_t;
+} header_t;
 
 typedef struct hello_data {
 	/* len includes the null byte */
@@ -35,7 +35,10 @@ typedef struct request_data {
 	char filename[];
 } request_data_t;
 
-int create_hello_message(headers_t *headers, hello_data_t **hello_data);
-int create_request_message(files_t *files, headers_t *headers,
-			   request_data_t **request_data);
-int create_metadata_headers(files_t *files, headers_t *headers);
+hello_data_t *create_hello_message(header_t *header);
+
+request_data_t *create_request_message(const files_t *restrict files,
+				       header_t *restrict header);
+
+void create_metadata_header(header_t *restrict header,
+			    const files_t *restrict files);

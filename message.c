@@ -1,3 +1,4 @@
+#include <bits/posix1_lim.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,65 +8,69 @@
 #include "files.h"
 #include "message.h"
 
-int create_hello_message(headers_t *headers, hello_data_t **hello_data)
+hello_data_t *create_hello_message(header_t *header)
 {
-	const char *login = getlogin();
-	if (login == NULL)
-		login = default_user_name;
-
-	const size_t login_size = strlen(login) + 1;
-	const size_t data_size = sizeof(hello_data_t) + login_size;
+	char username[LOGIN_NAME_MAX];
+	if (getlogin_r(username, sizeof(username)) != 0) {
+		memcpy(username, default_user_name, sizeof(default_user_name));
+	}
+	const size_t username_size = strlen(username) + 1;
+	const size_t data_size = sizeof(hello_data_t) + username_size;
 
 	hello_data_t *data = malloc(data_size);
-
 	if (data == NULL)
 		CORE_ERR("malloc");
 
-	headers->type = mt_hello;
-	headers->data_size = data_size;
+	*header = (header_t){
+		.type = mt_hello,
+		.data_size = data_size,
+	};
 
-	data->username_size = login_size;
-	memcpy(data->username, login, login_size);
+	data->username_size = username_size;
+	memcpy(data->username, username, username_size);
 
-	*hello_data = data;
-
-	return 0;
+	return data;
 
 error:
 	free(data);
 
-	return -1;
+	return NULL;
 }
 
-int create_request_message(files_t *files, headers_t *headers,
-			   request_data_t **request_data)
+request_data_t *create_request_message(const files_t *restrict files,
+				       header_t *restrict header)
 {
 	const size_t filename_size = strlen(files->root_dir_base) + 1;
 
-	request_data_t *data = malloc(sizeof(request_data_t) + filename_size);
+	const size_t req_size = sizeof(request_data_t) + filename_size;
+	request_data_t *data = malloc(req_size);
 
 	if (data == NULL)
 		CORE_ERR("malloc");
 
-	headers->type = mt_req;
-	headers->data_size = sizeof(request_data_t) + filename_size;
+	*header = (header_t){
+		.type = mt_req,
+		.data_size = req_size,
+	};
 
-	data->total_file_size = files->total_file_size;
-	data->filename_size = filename_size;
+	*data = (request_data_t){
+		.total_file_size = files->total_file_size,
+		.filename_size = filename_size,
+	};
 	memcpy(data->filename, files->root_dir_base, filename_size);
 
-	return 0;
-
+	return data;
 error:
 	free(data);
 
-	return -1;
+	return NULL;
 }
 
-int create_metadata_headers(files_t *files, headers_t *headers)
+void create_metadata_header(header_t *restrict header,
+			    const files_t *restrict files)
 {
-	headers->type = mt_meta;
-	headers->data_size = files->files_size;
-
-	return 0;
+	*header = (header_t){
+		.type = mt_meta,
+		.data_size = files->files_size,
+	};
 }
