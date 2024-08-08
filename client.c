@@ -87,7 +87,7 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
 	return 0;
 }
 
-static int send_msg(int soc, const header_t *h, const void *data,
+static int send_msg(int soc, header_t *h, void *data,
 		    progress_bar_t *const restrict prog_bar)
 {
 	if (exchange_data_with_socket(soc, op_write, h, sizeof(header_t),
