@@ -37,6 +37,7 @@ typedef struct {
 } files_iter;
 
 void files_iter_init(files_iter *it, const files_t *files);
+void files_iter_special_init(files_iter *it, file_t *curr, size_t size);
 file_t *files_iter_next(files_iter *it);
 
 typedef struct file_data {

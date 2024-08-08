@@ -95,6 +95,14 @@ void files_iter_init(files_iter *it, const files_t *files)
 	it->end = (file_t *)((uintptr_t)files->files + files->files_size);
 }
 
+void files_iter_special_init(files_iter *it, file_t *curr, size_t size)
+{
+	*it = (files_iter) {
+		.curr = curr,
+		.end = (file_t *)((uintptr_t)curr + size),
+	};
+}
+
 file_t *files_iter_next(files_iter *it)
 {
 	file_t *curr = it->curr;
