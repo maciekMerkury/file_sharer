@@ -1,28 +1,28 @@
 #include "files.h"
-#include <assert.h>
-#include <sys/stat.h>
 #include <argp.h>
-#include <poll.h>
-#include <linux/limits.h>
+#include <arpa/inet.h>
+#include <assert.h>
 #include <dirent.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <linux/limits.h>
+#include <netinet/in.h>
 #include <poll.h>
+#include <pwd.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/mman.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
-#include <stdint.h>
-#include <stdbool.h>
-#include <arpa/inet.h>
-#include <fcntl.h>
-#include <sys/mman.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <netinet/in.h>
-#include <string.h>
-#include <pwd.h>
-#include <sys/socket.h>
 
-#include "progress_bar.h"
-#include "message.h"
 #include "core.h"
+#include "message.h"
+#include "progress_bar.h"
 
 typedef struct {
 	int parsed;

@@ -1,11 +1,12 @@
 #pragma once
 
-#include "message.h"
-#include "progress_bar.h"
 #include <linux/limits.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <sys/types.h>
+
+#include "message.h"
+#include "progress_bar.h"
 
 #define STRINGIFY(macro) ANOTHERSTRING(macro)
 #define ANOTHERSTRING(macro) #macro
@@ -20,8 +21,7 @@ ssize_t exchange_data_with_socket(int soc, operation op, void *restrict buf,
 				  progress_bar_t *const restrict prog_bar);
 
 int send_msg(int soc, header_t *h, void *data);
-/*
- * data must be either NULL or ptr to malloced memory */
+/* data must be either NULL or ptr to malloced memory */
 int receive_msg(int soc, header_t *restrict h, void *restrict *data);
 
 #define ERR(source)                                                      \
