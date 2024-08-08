@@ -1,5 +1,3 @@
-#include "progress_bar.h"
-#include "size_info.h"
 #include <bits/time.h>
 #include <fcntl.h>
 #include <math.h>
@@ -9,6 +7,9 @@
 #include <sys/ioctl.h>
 #include <time.h>
 #include <unistd.h>
+
+#include "core.h"
+#include "progress_bar.h"
 
 size_info calculate_speed(const progress_bar_t *const bar, const size_t curr,
 			  const struct timespec dtt)

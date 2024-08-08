@@ -13,10 +13,6 @@ typedef enum operation { op_read, op_write } operation;
 ssize_t exchange_data_with_socket(int soc, operation op, void *restrict buf,
 				  size_t len,
 				  progress_bar_t *const restrict prog_bar);
-/*
- * returns the src ptr advanced by len bytes
- */
-void const *memcpyy(void *restrict dest, const void *restrict src, size_t len);
 
 #define ERR(source)                                                      \
 	(perror(source), fprintf(stderr, "%s:%d\n", __FILE__, __LINE__), \
@@ -28,3 +24,11 @@ void const *memcpyy(void *restrict dest, const void *restrict src, size_t len);
 		fprintf(stderr, "%s:%d\n", __FILE__, __LINE__); \
 		goto error;                                     \
 	} while (0)
+
+typedef struct size_info {
+	double size;
+	unsigned int unit_idx;
+} size_info;
+
+size_info bytes_to_size(size_t size);
+const char *const unit(size_info info);
