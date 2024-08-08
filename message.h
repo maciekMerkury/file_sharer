@@ -29,6 +29,7 @@ typedef struct hello_data {
 
 typedef struct request_data {
 	off_t total_file_size;
+	file_type file_type;
 
 	/* includes the null byte */
 	size_t filename_size;

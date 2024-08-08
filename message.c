@@ -55,6 +55,7 @@ request_data_t *create_request_message(const files_t *restrict files,
 
 	*data = (request_data_t){
 		.total_file_size = files->total_file_size,
+		.file_type = files->files[0].type,
 		.filename_size = filename_size,
 	};
 	memcpy(data->filename, files->root_dir_base, filename_size);
