@@ -1,6 +1,5 @@
 #include "core.h"
 #include "files.h"
-#include "entry.h"
 #include "message.h"
 #include "progress_bar.h"
 #include "size_info.h"
@@ -16,6 +15,7 @@
 #include <sys/mman.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
 #define CLEANUP(label)              \
@@ -87,49 +87,66 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
 	return 0;
 }
 
+static int send_msg(int soc, const header_t *h, const void *data,
+		    progress_bar_t *const restrict prog_bar)
+{
+	if (exchange_data_with_socket(soc, op_write, h, sizeof(header_t),
+				      prog_bar) < 0)
+		return -1;
+
+	if (exchange_data_with_socket(soc, op_write, data, h->data_size,
+				      prog_bar) < 0)
+		return -1;
+
+	return 0;
+}
+
 /* also performs the handshake, etc */
 static int server_connect(int *dst_soc, struct in_addr addr, in_port_t port)
 {
 	int soc, ret = 0;
 
+	puts("soc");
 	if ((soc = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
 		perror("socket");
 		return -1;
 	}
 
-	/*
 	struct sockaddr_in target = {
 		.sin_addr = addr,
 		.sin_family = AF_INET,
 		.sin_port = port,
 	};
 
+	printf("port: %d\n", ntohs(port));
 	if ((ret = connect(soc, (const struct sockaddr *)&target,
 			   sizeof(struct sockaddr_in))) < 0) {
 		perror("connect");
 		goto soc_cleanup;
 	}
 
-	hello_data_t *hello = malloc(MAX_HELLO_DATA_SIZE);
-	hello->username_len = NAME_MAX + 1;
+	header_t header;
+	hello_data_t *data;
+	if (!(data = create_hello_message(&header))) {
+		ret = -1;
+		goto soc_cleanup;
+	}
 
-	get_name(hello);
-
-	message_type type = mt_hello;
-
-	if ((ret = exchange_data_with_socket(soc, op_write, &type,
-					     sizeof(message_type), NULL)) < 0)
+	puts("send_msg");
+	if (send_msg(soc, &header, data, NULL) < 0) {
+		ret = -1;
 		goto hello_cleanup;
+	}
 
-	if ((ret = exchange_data_with_socket(
-		     soc, op_write, hello,
-		     sizeof(hello_data_t) + hello->username_len, NULL)) < 0)
+	puts("get header");
+	if (exchange_data_with_socket(soc, op_read, &header, sizeof(header_t),
+				      NULL) < 0) {
+		ret = -1;
 		goto hello_cleanup;
+	}
 
-	if ((ret = recv(soc, &type, sizeof(message_type), 0)) < 0)
-		goto hello_cleanup;
-
-	switch (type) {
+	puts("switch");
+	switch (header.type) {
 	case mt_ack:
 		ret = 0;
 		goto hello_cleanup;
@@ -138,21 +155,32 @@ static int server_connect(int *dst_soc, struct in_addr addr, in_port_t port)
 		ret = 1;
 		goto hello_cleanup;
 	default:
-		fprintf(stderr, "invalid response from the server: %u\n", type);
+		fprintf(stderr, "invalid response from the server: %u\n",
+			header.type);
 		ret = -1;
 		goto hello_cleanup;
 	}
 
 hello_cleanup:
-	free(hello);
+	free(data);
+
 soc_cleanup:
-	if (ret == 0)
-		*dst_soc = soc;
-	else
+	if (ret < 0) {
 		close(soc);
-	*/
+	} else {
+		*dst_soc = soc;
+	}
+
 	return ret;
 }
+
+#define GOTO(label)                                             \
+	do {                                                    \
+		fprintf(stderr, "%s:%i\n", __FILE__, __LINE__); \
+		goto label;                                     \
+	} while (0)
+#define read_header() \
+	exchange_data_with_socket(soc, op_read, &h, sizeof(header_t), NULL)
 
 /*
  * returns:
@@ -160,118 +188,152 @@ soc_cleanup:
  *      0 on server accepting
  *      1 on server rejecting
  */
-static int send_metadata(int soc, const entry_t *entry)
+static int send_metadata(int soc, const files_t *metadata)
 {
+	header_t h;
+
+	request_data_t *data = create_request_message(metadata, &h);
+	if (!data)
+		return -1;
+
 	int ret = 0;
-	size_t len = total_entry_len(entry);
-	void *dat = malloc(len);
-	if (deflate_entry(entry, dat, len) != dat) {
-		ret = -1;
-		goto data_cleanup;
-	}
 
-	if ((ret = exchange_data_with_socket(soc, op_write, &len,
-					     sizeof(size_t), NULL)) < 0)
-		goto data_cleanup;
+	if ((ret = send_msg(soc, &h, data, NULL)) < 0)
+		GOTO(data_cleanup);
 
-	if ((ret = exchange_data_with_socket(soc, op_write, dat, len, NULL)) <
-	    0)
-		goto data_cleanup;
+	puts("waiting for req ack");
+	if ((ret = read_header()) < 0)
+		GOTO(data_cleanup);
+	/*
+	if ((ret = exchange_data_with_socket(soc, op_read, &h, sizeof(header_t), NULL)) < 0)
+		GOTO(data_cleanup);
+	*/
 
-	// this is ugly
-data_cleanup:
-	free(dat);
-	if (ret < 0)
-		return -1;
-
-	message_type t;
-	if (recv(soc, &t, sizeof(t), 0) < 0)
-		return -1;
-
-	switch (t) {
+	puts("req switch");
+	switch (h.type) {
 	case mt_ack:
-		return 0;
+		ret = 0;
+		break;
 	case mt_nack:
-		return 1;
+		ret = 1;
+		GOTO(data_cleanup);
 	default:
+		ret = -1;
+		GOTO(data_cleanup);
+	}
+
+	create_metadata_header(&h, metadata);
+
+	if ((ret = send_msg(soc, &h, metadata->files, NULL)) < 0)
+		GOTO(data_cleanup);
+
+	puts("waiting for metadata ack");
+	if ((ret = read_header()) < 0)
+		GOTO(data_cleanup);
+
+	puts("meta switch");
+	switch (h.type) {
+	case mt_ack:
+		ret = 0;
+		break;
+	case mt_nack:
+		ret = 1;
+		GOTO(data_cleanup);
+	default:
+		ret = -1;
+		GOTO(data_cleanup);
+	}
+
+data_cleanup:
+	free(data);
+
+	return ret;
+}
+
+static int send_all_files(files_t *fs, int soc)
+{
+	if (chdir(fs->parent_dir) < 0) {
+		perror("chdir");
 		return -1;
 	}
+
+	files_iter it;
+	files_iter_init(&it, fs);
+	file_t *ne;
+	file_data_t fdata;
+
+	progress_bar_t p;
+
+	while ((ne = files_iter_next(&it))) {
+		if (ne->type == ft_dir)
+			continue;
+
+		if (open_and_map_file(ne, &fdata, fo_read) < 0) {
+			return -1;
+		}
+
+		prog_bar_init(&p, ne->path, ne->size,
+			      (struct timespec){ .tv_nsec = 500e3 });
+
+		const int ret = exchange_data_with_socket(
+			soc, op_write, fdata.map, fdata.size, &p);
+		destroy_file_data(&fdata);
+		if (ret < 0)
+			return -1;
+	}
+
+	return 0;
 }
 
 /* will do all the cleanup necessary */
 static int client_main(in_port_t port, struct in_addr addr, char *file_path)
 {
+	puts("fs");
 	files_t fs;
 	if (create_files(file_path, &fs) < 0) {
-		fprintf(stderr, "poopoo");
-		perror("\tcreate_files");
+		fprintf(stderr, "could not open file\n");
+		exit(EXIT_FAILURE);
 	}
 
-	files_iter it;
-	files_iter_init(&it, &fs);
-	file_t *f;
+	printf("%s\n", fs.root_dir_base);
+	printf("%s\n", fs.parent_dir);
 
-	puts("start");
-	while ((f = files_iter_next(&it))) {
-		printf("%s\n", f->path);
-	}
-	puts("done");
-
-	destroy_files(&fs);
-	free(file_path);
-	return 0;
-
+	puts("server");
 	int ret = EXIT_SUCCESS;
-	entry_t base;
-	if (read_entry(&base, file_path) < 0)
-		return EXIT_FAILURE;
-
 	int server;
-	if (server_connect(&server, addr, port) != 0)
-		CLEANUP(file_cleanup);
+	if (server_connect(&server, addr, port) != 0) {
+		CLEANUP(fs_cleanup);
+	}
 
-	switch (send_metadata(server, &base)) {
+	switch (send_metadata(server, &fs)) {
 	case 0:
-		printf("server accepted\n");
 		break;
 	case 1:
 		printf("server did not accept the transfer. exiting\n");
 		CLEANUP(server_cleanup);
-		break;
 	case -1:
 		perror("sending metadata");
 		CLEANUP(server_cleanup);
-		break;
 	default:
-		fprintf(stderr, "sus\n");
-		exit(21);
+		__builtin_unreachable();
 	}
 
-	size_info size = bytes_to_size(base.size);
-	printf("sending %s, size %.2lf%s\n", base.name, size.size,
+	size_info size = bytes_to_size(fs.total_file_size);
+	printf("sending %s, size %.2lf%s\n", fs.root_dir_base, size.size,
 	       unit(size));
 
-	progress_bar_t bar;
-	prog_bar_init(&bar, base.name, base.size,
-		      (struct timespec){ .tv_nsec = 500e6 });
-
-	/*
-	ssize_t l = exchange_data_with_socket(server, op_write, f.map,
-					      f.data.size, &bar);
-	assert(l == f.data.size);
-	if (l < 0) {
-		perror("sending file");
+	if ((ret = send_all_files(&fs, server)) < 0) {
+		fprintf(stderr, "could not send all files\n");
 		CLEANUP(server_cleanup);
 	}
-	*/
 
+	ret = EXIT_SUCCESS;
 server_cleanup:
 	shutdown(server, SHUT_RDWR);
 	close(server);
-file_cleanup:
-	entry_deallocate(&base);
 
-	free(file_path);
+fs_cleanup:
+	destroy_files(&fs);
 
 	return ret;
 }
@@ -293,7 +355,7 @@ int main(int argc, char **argv)
 	};
 
 	args a = {
-		.port = DEFAULT_PORT,
+		.port = htons(DEFAULT_PORT),
 	};
 
 	if (argp_parse(&arg_parser, argc, argv, 0, NULL, &a) < 0) {

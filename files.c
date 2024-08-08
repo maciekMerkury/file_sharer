@@ -128,7 +128,8 @@ int open_and_map_file(file_t *file, file_data_t *file_data,
 
 	file_data->size = file->size;
 
-	if ((file_data->fd = open(file->path, open_flags, file->permissions)) < 0)
+	if ((file_data->fd = open(file->path, open_flags, file->permissions)) <
+	    0)
 		CORE_ERR("open");
 	if ((file_data->map = mmap(NULL, file_data->size, map_flags,
 				   MAP_FILE | MAP_SHARED, file_data->fd, 0)) ==
