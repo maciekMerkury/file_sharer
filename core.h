@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
-#define DEFAULT_POLL_TIMEOUT (1000)
+#define DEFAULT_POLL_TIMEOUT (10000)
 
 typedef enum operation { op_read, op_write } operation;
 
