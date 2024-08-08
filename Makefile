@@ -1,6 +1,6 @@
 CFLAGS=-std=gnu17 -Werror -Wall -Wno-trigraphs -Os -pedantic
 DEBUG_CFLAGS=-fsanitize=address -fsanitize=undefined -g -Og
-COMMON:=core.o progress_bar.o size_info.o message.o entry.o files.o entry_iterator.o
+COMMON:=core.o progress_bar.o size_info.o message.o files.o
 LDLIBS=-lm
 CC:=gcc
 ALL_FILES :=$(wildcard *.[c|h])
