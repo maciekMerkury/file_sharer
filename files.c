@@ -51,10 +51,12 @@ static int fn(const char *path, const struct stat *s, int flags, struct FTW *f)
 	files->files = realloc(files->files, files->files_size);
 	file_t *new_file = (file_t *)(((uintptr_t)files->files) + old_size);
 
-	new_file->type = flags == FTW_F ? ft_reg : ft_dir;
-	new_file->permissions = s->st_mode;
-	new_file->size = flags == FTW_F ? s->st_size : 0;
-	new_file->path_size = path_size;
+	*new_file = (file_t) {
+		.type = flags == FTW_F ? ft_reg : ft_dir,
+		.permissions = s->st_mode,
+		.size = flags == FTW_F ? s->st_size : 0,
+		.path_size = path_size,
+	};
 	memcpy(new_file->path, path + parent_dir_len, path_len);
 
 	files->total_file_size += new_file->size;
