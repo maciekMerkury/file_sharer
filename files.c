@@ -40,7 +40,7 @@ static int fn(const char *path, const struct stat *s, int flags, struct FTW *f)
 		return 0;
 	}
 
-	const size_t parent_dir_len = strlen(files->parent_dir);
+	const size_t parent_dir_len = strlen(files->parent_dir) + 1;
 	const size_t old_size = files->files_size;
 	const size_t path_len = strlen(path) + 1 - parent_dir_len;
 	const size_t alignment = alignof(file_t) - path_len % alignof(file_t);
