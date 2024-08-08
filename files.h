@@ -15,7 +15,7 @@ typedef struct file {
 	char path[];
 } file_t;
 
-char *get_file_type_name(file_t *file);
+char *get_file_type_name(file_type file_type);
 
 typedef struct files {
 	off_t total_file_size;

@@ -16,9 +16,9 @@
 
 #define MAX_FD 20
 
-char *get_file_type_name(file_t *file)
+char *get_file_type_name(file_type file_type)
 {
-	return file->type == ft_reg ? "file" : "directory";
+	return file_type == ft_reg ? "file" : "directory";
 }
 
 static files_t *files;
