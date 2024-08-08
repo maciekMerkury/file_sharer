@@ -10,8 +10,8 @@
 
 typedef enum operation { op_read, op_write } operation;
 
-ssize_t exchange_data_with_socket(int soc, operation op,
-				  const void *const restrict buf, size_t len,
+ssize_t exchange_data_with_socket(int soc, operation op, void *restrict buf,
+				  size_t len,
 				  progress_bar_t *const restrict prog_bar);
 /*
  * returns the src ptr advanced by len bytes

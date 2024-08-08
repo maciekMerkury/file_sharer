@@ -22,8 +22,8 @@
 		}                                \
 	} while (0);
 
-ssize_t exchange_data_with_socket(int soc, operation op,
-				  const void *const restrict buf, size_t len,
+ssize_t exchange_data_with_socket(int soc, operation op, void *restrict buf,
+				  size_t len,
 				  progress_bar_t *const restrict prog_bar)
 {
 	int event = op_read ? POLLIN : POLLOUT;
