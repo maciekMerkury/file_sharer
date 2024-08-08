@@ -22,7 +22,6 @@
 
 #include "progress_bar.h"
 #include "message.h"
-#include "size_info.h"
 #include "core.h"
 
 typedef struct {

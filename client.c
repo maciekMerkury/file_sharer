@@ -1,8 +1,3 @@
-#include "core.h"
-#include "files.h"
-#include "message.h"
-#include "progress_bar.h"
-#include "size_info.h"
 #include <argp.h>
 #include <arpa/inet.h>
 #include <assert.h>
@@ -17,6 +12,11 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
+
+#include "core.h"
+#include "files.h"
+#include "message.h"
+#include "progress_bar.h"
 
 #define CLEANUP(label)              \
 	do {                        \
