@@ -15,14 +15,14 @@ typedef struct file {
 	char path[];
 } file_t;
 
-char *get_file_type_name(file_type file_type);
+const char *get_file_type_name(file_type file_type);
 
 typedef struct files {
 	off_t total_file_size;
 
 	/* null-terminated */
-	char *parent_dir;
-	char *root_dir_base;
+	char *root_dir;
+	int root_dir_base;
 
 	size_t files_size;
 	file_t *files;
@@ -30,6 +30,9 @@ typedef struct files {
 
 int create_files(const char *path, files_t *files);
 void destroy_files(files_t *files);
+
+const char *get_parent_dir(const files_t *files);
+const char *get_root_dir_basename(const files_t *files);
 
 typedef struct {
 	file_t *curr;
@@ -49,6 +52,7 @@ typedef struct file_data {
 typedef enum file_operation { fo_read, fo_write } file_operation;
 
 /* chdir to files_t.parent_dir before running */
+/* will set file_data.map to NULL if file.size is 0 */
 int open_and_map_file(file_t *file, file_data_t *file_data,
 		      file_operation operation);
 void destroy_file_data(file_data_t *file_data);

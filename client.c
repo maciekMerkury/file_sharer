@@ -234,7 +234,7 @@ data_cleanup:
 
 static int send_all_files(files_t *fs, int soc)
 {
-	if (chdir(fs->parent_dir) < 0) {
+	if (chdir(get_parent_dir(fs)) < 0) {
 		perror("chdir");
 		return -1;
 	}
@@ -277,8 +277,8 @@ static int client_main(in_port_t port, struct in_addr addr, char *file_path)
 		exit(EXIT_FAILURE);
 	}
 
-	printf("%s\n", fs.root_dir_base);
-	printf("%s\n", fs.parent_dir);
+	printf("%s\n", get_root_dir_basename(&fs));
+	printf("%s\n", get_parent_dir(&fs));
 
 	puts("server");
 	int ret = EXIT_SUCCESS;
@@ -301,8 +301,8 @@ static int client_main(in_port_t port, struct in_addr addr, char *file_path)
 	}
 
 	size_info size = bytes_to_size(fs.total_file_size);
-	printf("sending %s, size %.2lf%s\n", fs.root_dir_base, size.size,
-	       unit(size));
+	printf("sending %s, size %.2lf%s\n", get_root_dir_basename(&fs),
+	       size.size, unit(size));
 
 	if ((ret = send_all_files(&fs, server)) < 0) {
 		fprintf(stderr, "could not send all files\n");

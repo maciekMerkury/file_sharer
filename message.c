@@ -40,7 +40,8 @@ error:
 request_data_t *create_request_message(const files_t *restrict files,
 				       header_t *restrict header)
 {
-	const size_t filename_size = strlen(files->root_dir_base) + 1;
+	const char *root_dir_basename = get_root_dir_basename(files);
+	const size_t filename_size = strlen(root_dir_basename) + 1;
 
 	const size_t req_size = sizeof(request_data_t) + filename_size;
 	request_data_t *data = malloc(req_size);
@@ -58,7 +59,7 @@ request_data_t *create_request_message(const files_t *restrict files,
 		.file_type = files->files[0].type,
 		.filename_size = filename_size,
 	};
-	memcpy(data->filename, files->root_dir_base, filename_size);
+	memcpy(data->filename, root_dir_basename, filename_size);
 
 	return data;
 error:

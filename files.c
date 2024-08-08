@@ -16,20 +16,46 @@
 
 #define MAX_FD 20
 
-char *get_file_type_name(file_type file_type)
+const char *get_file_type_name(file_type file_type)
 {
 	return file_type == ft_reg ? "file" : "directory";
 }
 
 static files_t *files;
+
+const char *get_parent_dir(const files_t *files)
+{
+	if (strcmp(files->root_dir, "/") == 0) {
+		// we can access the root directory from any directory
+		// so the current directory will do
+		return ".";
+	}
+
+	switch (files->root_dir_base) {
+	case 0:
+		// file is in the current working directory
+		return ".";
+	case 1:
+		// file is in the root directory ('/')
+		return "/";
+	default:
+		return files->root_dir;
+	}
+}
+
+const char *get_root_dir_basename(const files_t *files)
+{
+	return files->root_dir + files->root_dir_base;
+}
+
 static int fn(const char *path, const struct stat *s, int flags, struct FTW *f)
 {
-	if (files->parent_dir == NULL) {
-		if ((files->parent_dir = strdup(path)) == NULL)
+	if (files->root_dir == NULL) {
+		files->root_dir_base = f->base;
+		if ((files->root_dir = strdup(path)) == NULL)
 			CORE_ERR("strdup");
-
-		files->parent_dir[f->base - 1] = '\0';
-		files->root_dir_base = &files->parent_dir[f->base];
+		if (f->base > 0)
+			files->root_dir[f->base - 1] = '\0';
 	}
 
 	if (flags != FTW_F && flags != FTW_D) {
@@ -40,11 +66,11 @@ static int fn(const char *path, const struct stat *s, int flags, struct FTW *f)
 		return 0;
 	}
 
-	const size_t parent_dir_len = strlen(files->parent_dir) + 1;
+	const char *relative_path = path + files->root_dir_base;
 	const size_t old_size = files->files_size;
-	const size_t path_len = strlen(path) + 1 - parent_dir_len;
-	const size_t alignment = alignof(file_t) - path_len % alignof(file_t);
-	const size_t path_size = path_len + alignment;
+	const size_t relative_path_size = strlen(relative_path) + 1;
+	const size_t path_size = relative_path_size + alignof(file_t) -
+				 relative_path_size % alignof(file_t);
 	const size_t struct_size = sizeof(file_t) + path_size;
 
 	files->files_size += struct_size;
@@ -57,7 +83,7 @@ static int fn(const char *path, const struct stat *s, int flags, struct FTW *f)
 		.size = flags == FTW_F ? s->st_size : 0,
 		.path_size = path_size,
 	};
-	memcpy(new_file->path, path + parent_dir_len, path_len);
+	memcpy(new_file->path, relative_path, relative_path_size);
 
 	files->total_file_size += new_file->size;
 
@@ -85,7 +111,7 @@ error:
 
 void destroy_files(files_t *files)
 {
-	free(files->parent_dir);
+	free(files->root_dir);
 	free(files->files);
 }
 
@@ -126,11 +152,17 @@ int open_and_map_file(file_t *file, file_data_t *file_data,
 				 O_RDWR | O_CREAT | O_APPEND | O_EXCL;
 	int map_flags = operation == fo_read ? PROT_READ : PROT_WRITE;
 
-	file_data->size = file->size;
+	*file_data = (file_data_t){
+		.size = file->size,
+	};
 
 	if ((file_data->fd = open(file->path, open_flags, file->permissions)) <
 	    0)
 		CORE_ERR("open");
+
+	if (file_data->size == 0)
+		return 0;
+
 	if ((file_data->map = mmap(NULL, file_data->size, map_flags,
 				   MAP_FILE | MAP_SHARED, file_data->fd, 0)) ==
 	    MAP_FAILED)
