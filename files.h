@@ -1,6 +1,7 @@
 #pragma once
 #include <sys/types.h>
 
+#include "core.h"
 #include "stream.h"
 
 typedef enum file_type { ft_reg, ft_dir } file_type;
@@ -38,10 +39,8 @@ typedef struct file_data {
 	size_t size;
 } file_data_t;
 
-typedef enum file_operation { fo_read, fo_write } file_operation;
-
 /* chdir to files_t.parent_dir before running */
 /* will set file_data.map to NULL if file.size is 0 */
 int open_and_map_file(file_t *file, file_data_t *file_data,
-		      file_operation operation);
+		      operation_type operation);
 void destroy_file_data(file_data_t *file_data);

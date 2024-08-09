@@ -130,15 +130,15 @@ bool recv_hello(client_t *client)
 	}
 
 	header_t header;
-	if (exchange_data_with_socket(client->socket, op_read, &header,
-				      sizeof(header_t), NULL) < 0)
+	if (perf_soc_op(client->socket, op_read, &header, sizeof(header_t),
+			NULL) < 0)
 		ERR("recv");
 
 	assert(header.type == mt_hello);
 
 	hello_data_t *hello = malloc(header.data_size);
-	if (exchange_data_with_socket(client->socket, op_read, hello,
-				      header.data_size, NULL) < 0)
+	if (perf_soc_op(client->socket, op_read, hello, header.data_size,
+			NULL) < 0)
 		ERR("recv");
 
 	client->info = hello;
@@ -147,8 +147,8 @@ bool recv_hello(client_t *client)
 		.type = mt_ack,
 		.data_size = 0,
 	};
-	if (exchange_data_with_socket(client->socket, op_write, &ack,
-				      sizeof(header_t), NULL) < 0)
+	if (perf_soc_op(client->socket, op_write, &ack, sizeof(header_t),
+			NULL) < 0)
 		ERR("send");
 
 	return true;
@@ -179,15 +179,15 @@ bool accept_client(int sock, client_t *client)
 bool confirm_transfer(client_t *client, char path[PATH_MAX])
 {
 	header_t header;
-	if (exchange_data_with_socket(client->socket, op_read, &header,
-				      sizeof(header_t), NULL) < 0)
+	if (perf_soc_op(client->socket, op_read, &header, sizeof(header_t),
+			NULL) < 0)
 		ERR("recv");
 
 	assert(header.type == mt_req);
 
 	request_data_t *request = malloc(header.data_size);
-	if (exchange_data_with_socket(client->socket, op_read, request,
-				      header.data_size, NULL) < 0)
+	if (perf_soc_op(client->socket, op_read, request, header.data_size,
+			NULL) < 0)
 		ERR("recv");
 
 	size_info size = bytes_to_size(request->total_file_size);
@@ -209,8 +209,8 @@ bool confirm_transfer(client_t *client, char path[PATH_MAX])
 		.data_size = 0,
 	};
 
-	if (exchange_data_with_socket(client->socket, op_write, &res,
-				      sizeof(header_t), NULL) < 0)
+	if (perf_soc_op(client->socket, op_write, &res, sizeof(header_t),
+			NULL) < 0)
 		ERR("send");
 
 	return accept;
@@ -222,8 +222,8 @@ void recv_metadata(client_t *client)
 		ERR("recv");
 
 	header_t ack = { .type = mt_ack, .data_size = 0 };
-	if (exchange_data_with_socket(client->socket, op_write, &ack,
-				      sizeof(header_t), NULL) < 0)
+	if (perf_soc_op(client->socket, op_write, &ack, sizeof(header_t),
+			NULL) < 0)
 		ERR("send");
 }
 
@@ -246,7 +246,7 @@ void recv_data(client_t *client, char path[PATH_MAX])
 			continue;
 		}
 
-		if (open_and_map_file(file, &file_data, fo_write) < 0)
+		if (open_and_map_file(file, &file_data, op_write) < 0)
 			ERR("open and map");
 		if (ftruncate(file_data.fd, file_data.size) < 0)
 			ERR("ftruncate");
@@ -254,9 +254,8 @@ void recv_data(client_t *client, char path[PATH_MAX])
 		snprintf(title, PATH_MAX, "Receiving %s", file->rel_path);
 		prog_bar_init(&bar, title, file_data.size, ts);
 
-		if (exchange_data_with_socket(client->socket, op_read,
-					      file_data.map, file_data.size,
-					      &bar) < 0)
+		if (perf_soc_op(client->socket, op_read, file_data.map,
+				file_data.size, &bar) < 0)
 			ERR("recv");
 
 		destroy_file_data(&file_data);

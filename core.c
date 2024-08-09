@@ -47,9 +47,8 @@ const char *const unit(size_info info)
 	return (info.unit_idx < UNIT_LEN) ? size_units[info.unit_idx] : NULL;
 }
 
-ssize_t exchange_data_with_socket(int soc, operation op, void *restrict buf,
-				  size_t len,
-				  progress_bar_t *const restrict prog_bar)
+ssize_t perf_soc_op(int soc, operation_type op, void *restrict buf, size_t len,
+		    progress_bar_t *const restrict prog_bar)
 {
 	int event = op_read ? POLLIN : POLLOUT;
 
@@ -110,105 +109,4 @@ ssize_t exchange_data_with_socket(int soc, operation op, void *restrict buf,
 	}
 
 	return sent;
-}
-
-void const *memcpyy(void *restrict dest, const void *restrict src, size_t len)
-{
-	memcpy(dest, src, len);
-	return (void *)((uintptr_t)src + len);
-}
-
-int send_msg(int soc, header_t *h, void *data)
-{
-	if (exchange_data_with_socket(soc, op_write, h, sizeof(header_t),
-				      NULL) < 0)
-		return -1;
-
-	if (exchange_data_with_socket(soc, op_write, data, h->data_size, NULL) <
-	    0)
-		return -1;
-
-	return 0;
-}
-
-int receive_msg(int soc, header_t *restrict h, void *restrict *data)
-{
-	if (exchange_data_with_socket(soc, op_read, h, sizeof(header_t), NULL) <
-	    0)
-		return -1;
-
-	*data = realloc(*data, h->data_size);
-
-	if (!*data) {
-		perror("realloc");
-		return -1;
-	}
-
-	if (exchange_data_with_socket(soc, op_read, *data, h->data_size, NULL) <
-	    0) {
-		free(*data);
-		return -1;
-	}
-
-	return 0;
-}
-
-struct stream_info {
-	size_t len;
-	size_t size;
-};
-
-int send_stream(int soc, stream_t *restrict stream)
-{
-	struct stream_info sinfo = {
-		.len = stream->metadata.len,
-		.size = stream->size,
-	};
-
-	if (exchange_data_with_socket(soc, op_write, &sinfo,
-				      sizeof(struct stream_info), NULL) < 0)
-		return -1;
-
-	if (exchange_data_with_socket(soc, op_write, stream->metadata.sizes,
-				      sinfo.len * sizeof(size_t), NULL) < 0)
-		return -1;
-
-	if (exchange_data_with_socket(soc, op_write, stream->data, sinfo.size,
-				      NULL) < 0)
-		return -1;
-
-	return 0;
-}
-
-int recv_stream(int soc, stream_t *restrict stream)
-{
-	struct stream_info sinfo;
-
-	if (exchange_data_with_socket(soc, op_read, &sinfo,
-				      sizeof(struct stream_info), NULL) < 0)
-		return -1;
-
-	*stream = (stream_t){
-		.metadata = {
-			.cap = sinfo.len * sizeof(size_t),
-			.len = sinfo.len,
-			.sizes = malloc(sinfo.len * sizeof(size_t)),
-		},
-		.cap = sinfo.size,
-		.size = sinfo.size,
-		.data = malloc(sinfo.size),
-	};
-
-	if (stream->metadata.sizes == NULL || stream->data == NULL)
-		return -1;
-
-	if (exchange_data_with_socket(soc, op_read, stream->metadata.sizes,
-				      sinfo.len * sizeof(size_t), NULL) < 0)
-		return -1;
-
-	if (exchange_data_with_socket(soc, op_read, stream->data, sinfo.size,
-				      NULL) < 0)
-		return -1;
-
-	return 0;
 }

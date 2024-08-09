@@ -5,9 +5,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
-#include "message.h"
 #include "progress_bar.h"
-#include "stream.h"
 
 #define STRINGIFY(macro) ANOTHERSTRING(macro)
 #define ANOTHERSTRING(macro) #macro
@@ -34,15 +32,7 @@ typedef struct size_info {
 size_info bytes_to_size(size_t size);
 const char *const unit(size_info info);
 
-typedef enum operation { op_read, op_write } operation;
+typedef enum operation { op_read, op_write } operation_type;
 
-ssize_t exchange_data_with_socket(int soc, operation op, void *restrict buf,
-				  size_t len,
-				  progress_bar_t *const restrict prog_bar);
-
-int send_msg(int soc, header_t *h, void *data);
-/* data must be either NULL or ptr to malloced memory */
-int receive_msg(int soc, header_t *restrict h, void *restrict *data);
-
-int send_stream(int soc, stream_t *restrict stream);
-int recv_stream(int soc, stream_t *restrict stream);
+ssize_t perf_soc_op(int soc, operation_type op, void *restrict buf, size_t len,
+		    progress_bar_t *const restrict prog_bar);

@@ -118,8 +118,7 @@ static int server_connect(int *dst_soc, struct in_addr addr, in_port_t port)
 		goto hello_cleanup;
 	}
 
-	if (exchange_data_with_socket(soc, op_read, &header, sizeof(header_t),
-				      NULL) < 0) {
+	if (perf_soc_op(soc, op_read, &header, sizeof(header_t), NULL) < 0) {
 		ret = -1;
 		goto hello_cleanup;
 	}
@@ -157,8 +156,7 @@ soc_cleanup:
 		fprintf(stderr, "%s:%i\n", __FILE__, __LINE__); \
 		goto label;                                     \
 	} while (0)
-#define read_header() \
-	exchange_data_with_socket(soc, op_read, &h, sizeof(header_t), NULL)
+#define read_header() perf_soc_op(soc, op_read, &h, sizeof(header_t), NULL)
 
 /*
  * returns:
@@ -235,15 +233,15 @@ static int send_all_files(files_t *fs, int soc)
 		if (ne->type == ft_dir)
 			continue;
 
-		if (open_and_map_file(ne, &fdata, fo_read) < 0) {
+		if (open_and_map_file(ne, &fdata, op_read) < 0) {
 			return -1;
 		}
 
 		prog_bar_init(&p, ne->rel_path, ne->size,
 			      (struct timespec){ .tv_nsec = 500e3 });
 
-		const int ret = exchange_data_with_socket(
-			soc, op_write, fdata.map, fdata.size, &p);
+		const int ret =
+			perf_soc_op(soc, op_write, fdata.map, fdata.size, &p);
 		destroy_file_data(&fdata);
 		if (ret < 0)
 			return -1;
@@ -281,8 +279,8 @@ static int client_main(in_port_t port, struct in_addr addr, char *file_path)
 	}
 
 	size_info size = bytes_to_size(fs.total_file_size);
-	printf("sending %s, size %.2lf%s\n", ((file_t*)fs.filesa.data)->rel_path, size.size,
-	       unit(size));
+	printf("sending %s, size %.2lf%s\n",
+	       ((file_t *)fs.filesa.data)->rel_path, size.size, unit(size));
 
 	if ((ret = send_all_files(&fs, server)) < 0) {
 		fprintf(stderr, "could not send all files\n");

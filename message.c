@@ -68,3 +68,34 @@ error:
 
 	return NULL;
 }
+
+int send_msg(int soc, header_t *h, void *data)
+{
+	if (perf_soc_op(soc, op_write, h, sizeof(header_t), NULL) < 0)
+		return -1;
+
+	if (perf_soc_op(soc, op_write, data, h->data_size, NULL) < 0)
+		return -1;
+
+	return 0;
+}
+
+int receive_msg(int soc, header_t *restrict h, void *restrict *data)
+{
+	if (perf_soc_op(soc, op_read, h, sizeof(header_t), NULL) < 0)
+		return -1;
+
+	*data = realloc(*data, h->data_size);
+
+	if (!*data) {
+		perror("realloc");
+		return -1;
+	}
+
+	if (perf_soc_op(soc, op_read, *data, h->data_size, NULL) < 0) {
+		free(*data);
+		return -1;
+	}
+
+	return 0;
+}

@@ -74,3 +74,61 @@ void *stream_iter_next(stream_iter_t *it)
 
 	return curr;
 }
+
+struct stream_info {
+	size_t len;
+	size_t size;
+};
+
+int send_stream(int soc, stream_t *restrict stream)
+{
+	struct stream_info sinfo = {
+		.len = stream->metadata.len,
+		.size = stream->size,
+	};
+
+	if (perf_soc_op(soc, op_write, &sinfo, sizeof(struct stream_info),
+			NULL) < 0)
+		return -1;
+
+	if (perf_soc_op(soc, op_write, stream->metadata.sizes,
+			sinfo.len * sizeof(size_t), NULL) < 0)
+		return -1;
+
+	if (perf_soc_op(soc, op_write, stream->data, sinfo.size, NULL) < 0)
+		return -1;
+
+	return 0;
+}
+
+int recv_stream(int soc, stream_t *restrict stream)
+{
+	struct stream_info sinfo;
+
+	if (perf_soc_op(soc, op_read, &sinfo, sizeof(struct stream_info),
+			NULL) < 0)
+		return -1;
+
+	*stream = (stream_t){
+		.metadata = {
+			.cap = sinfo.len * sizeof(size_t),
+			.len = sinfo.len,
+			.sizes = malloc(sinfo.len * sizeof(size_t)),
+		},
+		.cap = sinfo.size,
+		.size = sinfo.size,
+		.data = malloc(sinfo.size),
+	};
+
+	if (stream->metadata.sizes == NULL || stream->data == NULL)
+		return -1;
+
+	if (perf_soc_op(soc, op_read, stream->metadata.sizes,
+			sinfo.len * sizeof(size_t), NULL) < 0)
+		return -1;
+
+	if (perf_soc_op(soc, op_read, stream->data, sinfo.size, NULL) < 0)
+		return -1;
+
+	return 0;
+}

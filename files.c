@@ -101,14 +101,14 @@ void destroy_files(files_t *files)
 }
 
 int open_and_map_file(file_t *file, file_data_t *file_data,
-		      file_operation operation)
+		      operation_type operation)
 {
 	assert(file->type == ft_reg);
 
-	int open_flags = operation == fo_read ?
+	int open_flags = operation == op_read ?
 				 O_RDONLY :
 				 O_RDWR | O_CREAT | O_APPEND | O_EXCL;
-	int map_flags = operation == fo_read ? PROT_READ : PROT_WRITE;
+	int map_flags = operation == op_read ? PROT_READ : PROT_WRITE;
 
 	*file_data = (file_data_t){
 		.size = file->size,

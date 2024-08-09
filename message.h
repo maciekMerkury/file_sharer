@@ -1,5 +1,6 @@
 #pragma once
 #include <linux/limits.h>
+#include <stdio.h>
 #include <sys/types.h>
 
 #include "files.h"
@@ -37,6 +38,10 @@ hello_data_t *create_hello_message(header_t *header);
 
 request_data_t *create_request_message(const files_t *restrict files,
 				       header_t *restrict header);
+
+int send_msg(int soc, header_t *h, void *data);
+/* data must be either NULL or ptr to malloced memory */
+int receive_msg(int soc, header_t *restrict h, void *restrict *data);
 
 void create_metadata_header(header_t *restrict header,
 			    const files_t *restrict files);

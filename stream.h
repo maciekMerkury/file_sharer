@@ -24,3 +24,6 @@ typedef struct stream_iter {
 
 void stream_iter_init(stream_iter_t *it, const stream_t *stream);
 void *stream_iter_next(stream_iter_t *it);
+
+int send_stream(int soc, stream_t *restrict stream);
+int recv_stream(int soc, stream_t *restrict stream);
