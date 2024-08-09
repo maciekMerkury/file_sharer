@@ -1,30 +1,38 @@
 #pragma once
 
-#include "progress_bar.h"
 #include <linux/limits.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <sys/types.h>
 
-typedef struct file_data {
-	off_t size;
-	char name[NAME_MAX + 1];
-} file_data_t;
+#include "progress_bar.h"
 
-int read_file_data(file_data_t *dst, const char *const path);
-int read_file_data_from_fd(file_data_t *dst, const char *const path, int fd);
+#define STRINGIFY(macro) ANOTHERSTRING(macro)
+#define ANOTHERSTRING(macro) #macro
 
-static const char start_transfer_message[] = "start";
-static const char file_size_units[4][4] = { "B", "kiB", "MiB", "GiB" };
-typedef struct file_size {
-    double size;
-    unsigned int unit_idx;
-} file_size_t;
+#define DEFAULT_POLL_TIMEOUT (10000)
+#define DEFAULT_PORT (2137)
 
-file_size_t bytes_to_size(size_t size);
-
-ssize_t send_all(const void *const buf, size_t len, int soc, progress_bar_t *prog_bar);
-
-#define ERR(source)                                                     \
-	(perror(source), fprintf(stderr, "%s:%d\n", __FILE__, __LINE__),    \
+#define ERR(source)                                                      \
+	(perror(source), fprintf(stderr, "%s:%d\n", __FILE__, __LINE__), \
 	 exit(EXIT_FAILURE))
+
+#define CORE_ERR(source)                                        \
+	do {                                                    \
+		perror(source);                                 \
+		fprintf(stderr, "%s:%d\n", __FILE__, __LINE__); \
+		goto error;                                     \
+	} while (0)
+
+typedef struct size_info {
+	double size;
+	unsigned int unit_idx;
+} size_info;
+
+size_info bytes_to_size(size_t size);
+const char *const unit(size_info info);
+
+typedef enum operation { op_read, op_write } operation_type;
+
+ssize_t perf_soc_op(int soc, operation_type op, void *restrict buf, size_t len,
+		    progress_bar_t *const restrict prog_bar);

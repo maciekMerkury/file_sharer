@@ -1,26 +1,96 @@
-#include "progress_bar.h"
-#include <errno.h>
-#include <poll.h>
-#include <linux/limits.h>
-#include <unistd.h>
-#include <stdint.h>
-#include <stdbool.h>
+#include "files.h"
+#include <argp.h>
 #include <arpa/inet.h>
+#include <assert.h>
+#include <dirent.h>
 #include <fcntl.h>
-#include <sys/mman.h>
-#include <stdlib.h>
-#include <stdio.h>
+#include <linux/limits.h>
 #include <netinet/in.h>
-#include <string.h>
+#include <poll.h>
 #include <pwd.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/mman.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
+#include <time.h>
+#include <unistd.h>
 
 #include "core.h"
+#include "message.h"
+#include "progress_bar.h"
+
+typedef struct {
+	int parsed;
+	char *const downloads_dir;
+	in_port_t port;
+} args;
+
+static error_t parse_opt(int key, char *arg, struct argp_state *state)
+{
+	args *a = state->input;
+	switch (key) {
+	case ARGP_KEY_ARG:
+		switch (a->parsed++) {
+		case 0:
+			a->port = atoi(arg);
+			break;
+		case 1:
+			// this should probably handle errors
+			realpath(arg, a->downloads_dir);
+			{
+				DIR *dir = opendir(a->downloads_dir);
+				if (!dir)
+					ERR("opendir");
+				if (closedir(dir) < 0)
+					ERR("closedir");
+			}
+			break;
+		default:
+			argp_usage(state);
+		}
+		break;
+	case ARGP_KEY_END:
+		if (a->parsed < 2)
+			argp_usage(state);
+		break;
+	default:
+		return ARGP_ERR_UNKNOWN;
+	};
+	return 0;
+}
+
+void read_args(int argc, char *argv[], uint16_t *port,
+	       char downloads_directory[PATH_MAX])
+{
+	const char *const args_doc = "PORT DOWNLOAD_PATH";
+	const struct argp_option options[] = { 0 };
+	const struct argp argp = {
+		.options = options,
+		.args_doc = args_doc,
+		.parser = parse_opt,
+	};
+	args a = { .parsed = 0, .downloads_dir = downloads_directory };
+
+	if (argp_parse(&argp, argc, argv, 0, NULL, &a) < 0) {
+		fprintf(stderr, "parsing error :(");
+		exit(EXIT_FAILURE);
+	}
+
+	*port = a.port;
+}
 
 typedef struct client {
 	int socket;
 	char addr_str[INET_ADDRSTRLEN];
+	hello_data_t *info;
+	stream_t filesa;
 } client_t;
+
+#define TIMEOUT 1000
 
 int setup(uint16_t port)
 {
@@ -45,7 +115,46 @@ int setup(uint16_t port)
 	return sock;
 }
 
-void accept_client(int sock, client_t *client)
+#define TIMEOUT 1000
+
+bool recv_hello(client_t *client)
+{
+	struct pollfd p = {
+		.fd = client->socket,
+		.events = POLLIN,
+	};
+
+	if (poll(&p, 1, TIMEOUT) == 0) {
+		fprintf(stderr, "client did not send data within timeout\n");
+		return false;
+	}
+
+	header_t header;
+	if (perf_soc_op(client->socket, op_read, &header, sizeof(header_t),
+			NULL) < 0)
+		ERR("recv");
+
+	assert(header.type == mt_hello);
+
+	hello_data_t *hello = malloc(header.data_size);
+	if (perf_soc_op(client->socket, op_read, hello, header.data_size,
+			NULL) < 0)
+		ERR("recv");
+
+	client->info = hello;
+
+	header_t ack = {
+		.type = mt_ack,
+		.data_size = 0,
+	};
+	if (perf_soc_op(client->socket, op_write, &ack, sizeof(header_t),
+			NULL) < 0)
+		ERR("send");
+
+	return true;
+}
+
+bool accept_client(int sock, client_t *client)
 {
 	printf("Waiting for a new client\n");
 
@@ -58,88 +167,99 @@ void accept_client(int sock, client_t *client)
 		       INET_ADDRSTRLEN))
 		ERR("inet_ntop");
 
-	printf("client from address %s has connected\n", client->addr_str);
+	if (!recv_hello(client))
+		return false;
+
+	printf("Client %s from address %s has connected\n",
+	       client->info->username, client->addr_str);
+
+	return true;
 }
 
-bool confirm_transfer(client_t *client, file_data_t *data, char path[PATH_MAX])
+bool confirm_transfer(client_t *client, char path[PATH_MAX])
 {
-	if (recv(client->socket, data, sizeof(file_data_t), 0) < 0)
+	header_t header;
+	if (perf_soc_op(client->socket, op_read, &header, sizeof(header_t),
+			NULL) < 0)
 		ERR("recv");
 
-	file_size_t size = bytes_to_size(data->size);
+	assert(header.type == mt_req);
 
-	printf("Do you want to receive file `%.255s` of size %.2lf %s"
-	       "from host %s? [Y/n] ",
-	       data->name, size.size, file_size_units[size.unit_idx],
-	       client->addr_str);
+	request_data_t *request = malloc(header.data_size);
+	if (perf_soc_op(client->socket, op_read, request, header.data_size,
+			NULL) < 0)
+		ERR("recv");
 
-    char *line = NULL;
-    size_t len;
-    if (getline(&line, &len, stdin) < 0)
-        ERR("getline");
-    char c = line[0];
+	size_info size = bytes_to_size(request->total_file_size);
+	printf("Do you want to receive %s `%.255s` of size %.2lf %s"
+	       " from user %s at host %s [Y/n] ",
+	       get_file_type_name(request->file_type), request->filename,
+	       size.size, unit(size), client->info->username, client->addr_str);
 
-    printf("%s\n", line);
-	return c == 'y' || c == 'Y' || c == '\n';
-}
+	char *line = NULL;
+	size_t len;
+	if (getline(&line, &len, stdin) < 0)
+		ERR("getline");
+	char c = line[0];
+	const bool accept = c == 'y' || c == 'Y' || c == '\n';
+	free(line);
 
-void receive_file(client_t *client, file_data_t *data, char path[PATH_MAX])
-{
-	if (send(client->socket, start_transfer_message,
-		 strlen(start_transfer_message) + 1, 0) < 0)
+	header_t res = {
+		.type = accept ? mt_ack : mt_nack,
+		.data_size = 0,
+	};
+
+	if (perf_soc_op(client->socket, op_write, &res, sizeof(header_t),
+			NULL) < 0)
 		ERR("send");
 
-	int fd;
-	if ((fd = open(path, O_RDWR | O_CREAT | O_APPEND | O_EXCL, 0644)) < 0)
-		ERR("open");
-	if (ftruncate(fd, data->size) < 0)
-		ERR("ftruncate");
+	return accept;
+}
 
-	void *file;
-	if ((file = mmap(NULL, data->size, PROT_WRITE, MAP_FILE | MAP_SHARED,
-			 fd, 0)) == MAP_FAILED)
-		ERR("mmap");
+void recv_metadata(client_t *client)
+{
+	if (recv_stream(client->socket, &client->filesa) < 0)
+		ERR("recv");
 
-	size_t total_received = 0;
-	ssize_t recv_size;
+	header_t ack = { .type = mt_ack, .data_size = 0 };
+	if (perf_soc_op(client->socket, op_write, &ack, sizeof(header_t),
+			NULL) < 0)
+		ERR("send");
+}
 
-	int flags;
-	if ((flags = fcntl(client->socket, F_GETFL)) < 0)
-		ERR("fcntl");
-	if (fcntl(client->socket, F_SETFL, flags | O_NONBLOCK) < 0)
-		ERR("fcntl");
+void recv_data(client_t *client, char path[PATH_MAX])
+{
+	stream_iter_t it;
+	stream_iter_init(&it, &client->filesa);
+
+	file_t *file;
+	file_data_t file_data;
+	chdir(path);
 
 	char title[PATH_MAX];
-	snprintf(title, PATH_MAX, "Receiving %s", path);
-
+	struct timespec ts = { 0, 1e8 };
 	progress_bar_t bar;
-	prog_bar_init(&bar, title, data->size,
-		      (struct timespec){ 0, 100000000 });
-
-	prog_bar_start(&bar);
-	while (total_received < data->size) {
-		if ((recv_size =
-			     recv(client->socket,
-				  (void *)((uintptr_t)file + total_received),
-				  (data->size - total_received), 0)) < 0) {
-			if (errno != EWOULDBLOCK)
-				ERR("recv");
-		} else {
-			total_received += recv_size;
-			prog_bar_advance(&bar, total_received);
+	while ((file = stream_iter_next(&it))) {
+		if (file->type == ft_dir) {
+			if (mkdir(file->rel_path, file->permissions) < 0)
+				ERR("mkdir");
+			continue;
 		}
+
+		if (open_and_map_file(file, &file_data, op_write) < 0)
+			ERR("open and map");
+		if (ftruncate(file_data.fd, file_data.size) < 0)
+			ERR("ftruncate");
+
+		snprintf(title, PATH_MAX, "Receiving %s", file->rel_path);
+		prog_bar_init(&bar, title, file_data.size, ts);
+
+		if (perf_soc_op(client->socket, op_read, file_data.map,
+				file_data.size, &bar) < 0)
+			ERR("recv");
+
+		destroy_file_data(&file_data);
 	}
-	prog_bar_finish(&bar);
-
-	printf("\nDone receiving file\n");
-
-	if (fcntl(client->socket, F_SETFL, flags) < 0)
-		ERR("fcntl");
-
-	if (munmap(file, data->size) < 0)
-		ERR("munmap");
-	if (close(fd) < 0)
-		ERR("close");
 }
 
 void cleanup_client(client_t *client)
@@ -147,43 +267,33 @@ void cleanup_client(client_t *client)
 	if (close(client->socket) < 0)
 		ERR("close");
 
-	printf("Disconnected client %s\n", client->addr_str);
-}
+	free(client->info);
 
-void usage(char *prog)
-{
-	fprintf(stderr, "USAGE: %s port download_directory\n", prog);
-	exit(EXIT_FAILURE);
+	printf("Disconnected client %s\n", client->addr_str);
 }
 
 int main(int argc, char *argv[])
 {
-	if (argc < 3)
-		usage(argv[0]);
+	char downloads_directory[PATH_MAX];
+	uint16_t port;
 
-	uint16_t port = atoi(argv[1]);
+	read_args(argc, argv, &port, downloads_directory);
 
 	int sock = setup(port);
 
-	// check if it's a valid directory
-	char downloads_directory[PATH_MAX];
-	realpath(argv[2], downloads_directory);
-
 	while (true) {
 		client_t client = { 0 };
-		file_data_t data;
 		char path[PATH_MAX];
 
 		accept_client(sock, &client);
-		if (!confirm_transfer(&client, &data, path)) {
+		if (!confirm_transfer(&client, path)) {
 			cleanup_client(&client);
 			continue;
 		}
 
-		strcpy(path, downloads_directory);
-		strcat(path, "/");
-		strcat(path, data.name);
-		receive_file(&client, &data, path);
+		recv_metadata(&client);
+		recv_data(&client, downloads_directory);
+
 		cleanup_client(&client);
 	}
 
