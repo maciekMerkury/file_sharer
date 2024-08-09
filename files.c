@@ -4,7 +4,6 @@
 #include <fcntl.h>
 #include <ftw.h>
 #include <stdalign.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -67,15 +66,12 @@ static int fn(const char *path, const struct stat *s, int flags, struct FTW *f)
 	}
 
 	const char *relative_path = path + files->root_dir_base;
-	const size_t old_size = files->files_size;
 	const size_t relative_path_size = strlen(relative_path) + 1;
 	const size_t path_size = relative_path_size + alignof(file_t) -
 				 relative_path_size % alignof(file_t);
 	const size_t struct_size = sizeof(file_t) + path_size;
 
-	files->files_size += struct_size;
-	files->files = realloc(files->files, files->files_size);
-	file_t *new_file = (file_t *)(((uintptr_t)files->files) + old_size);
+	file_t *new_file = stream_allocate(&files->filesa, struct_size);
 
 	*new_file = (file_t){
 		.type = flags == FTW_F ? ft_reg : ft_dir,
@@ -112,34 +108,7 @@ error:
 void destroy_files(files_t *files)
 {
 	free(files->root_dir);
-	free(files->files);
-}
-
-void files_iter_init(files_iter *it, const files_t *files)
-{
-	it->curr = files->files;
-	it->end = (file_t *)((uintptr_t)files->files + files->files_size);
-}
-
-void files_iter_special_init(files_iter *it, file_t *curr, size_t size)
-{
-	*it = (files_iter){
-		.curr = curr,
-		.end = (file_t *)((uintptr_t)curr + size),
-	};
-}
-
-file_t *files_iter_next(files_iter *it)
-{
-	file_t *curr = it->curr;
-
-	if (curr >= it->end)
-		return NULL;
-
-	it->curr =
-		(file_t *)((uintptr_t)curr + sizeof(file_t) + curr->path_size);
-
-	return curr;
+	stream_destroy(&files->filesa);
 }
 
 int open_and_map_file(file_t *file, file_data_t *file_data,

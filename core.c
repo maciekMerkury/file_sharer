@@ -23,6 +23,30 @@
 		}                                \
 	} while (0);
 
+#define UNIT_LEN 4
+static const char size_units[UNIT_LEN][4] = { "B", "KiB", "MiB", "GiB" };
+
+size_info bytes_to_size(size_t byte_size)
+{
+	double size = byte_size;
+	unsigned int idx = 0;
+
+	while (size >= 1024.0) {
+		idx++;
+		size /= 1024.0;
+	}
+
+	return (size_info){
+		.size = size,
+		.unit_idx = idx,
+	};
+}
+
+const char *const unit(size_info info)
+{
+	return (info.unit_idx < UNIT_LEN) ? size_units[info.unit_idx] : NULL;
+}
+
 ssize_t exchange_data_with_socket(int soc, operation op, void *restrict buf,
 				  size_t len,
 				  progress_bar_t *const restrict prog_bar)
@@ -129,26 +153,62 @@ int receive_msg(int soc, header_t *restrict h, void *restrict *data)
 	return 0;
 }
 
-#define UNIT_LEN 4
-static const char size_units[UNIT_LEN][4] = { "B", "KiB", "MiB", "GiB" };
+struct stream_info {
+	size_t len;
+	size_t size;
+};
 
-size_info bytes_to_size(size_t byte_size)
+int send_stream(int soc, stream_t *restrict stream)
 {
-	double size = byte_size;
-	unsigned int idx = 0;
-
-	while (size >= 1024.0) {
-		idx++;
-		size /= 1024.0;
-	}
-
-	return (size_info){
-		.size = size,
-		.unit_idx = idx,
+	struct stream_info sinfo = {
+		.len = stream->metadata.len,
+		.size = stream->size,
 	};
+
+	if (exchange_data_with_socket(soc, op_write, &sinfo,
+				      sizeof(struct stream_info), NULL) < 0)
+		return -1;
+
+	if (exchange_data_with_socket(soc, op_write, stream->metadata.sizes,
+				      sinfo.len * sizeof(size_t), NULL) < 0)
+		return -1;
+
+	if (exchange_data_with_socket(soc, op_write, stream->data, sinfo.size,
+				      NULL) < 0)
+		return -1;
+
+	return 0;
 }
 
-const char *const unit(size_info info)
+int recv_stream(int soc, stream_t *restrict stream)
 {
-	return (info.unit_idx < UNIT_LEN) ? size_units[info.unit_idx] : NULL;
+	struct stream_info sinfo;
+
+	if (exchange_data_with_socket(soc, op_read, &sinfo,
+				      sizeof(struct stream_info), NULL) < 0)
+		return -1;
+
+	*stream = (stream_t){
+		.metadata = {
+			.cap = sinfo.len * sizeof(size_t),
+			.len = sinfo.len,
+			.sizes = malloc(sinfo.len * sizeof(size_t)),
+		},
+		.cap = sinfo.size,
+		.size = sinfo.size,
+		.data = malloc(sinfo.size),
+	};
+
+	if (stream->metadata.sizes == NULL || stream->data == NULL)
+		return -1;
+
+	if (exchange_data_with_socket(soc, op_read, stream->metadata.sizes,
+				      sinfo.len * sizeof(size_t), NULL) < 0)
+		return -1;
+
+	if (exchange_data_with_socket(soc, op_read, stream->data, sinfo.size,
+				      NULL) < 0)
+		return -1;
+
+	return 0;
 }

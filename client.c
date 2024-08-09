@@ -170,7 +170,7 @@ soc_cleanup:
  *      0 on server accepting
  *      1 on server rejecting
  */
-static int send_metadata(int soc, const files_t *metadata)
+static int send_metadata(int soc, files_t *metadata)
 {
 	header_t h;
 
@@ -186,10 +186,6 @@ static int send_metadata(int soc, const files_t *metadata)
 	puts("waiting for req ack");
 	if ((ret = read_header()) < 0)
 		GOTO(data_cleanup);
-	/*
-	if ((ret = exchange_data_with_socket(soc, op_read, &h, sizeof(header_t), NULL)) < 0)
-		GOTO(data_cleanup);
-	*/
 
 	puts("req switch");
 	switch (h.type) {
@@ -204,10 +200,7 @@ static int send_metadata(int soc, const files_t *metadata)
 		GOTO(data_cleanup);
 	}
 
-	create_metadata_header(&h, metadata);
-
-	if ((ret = send_msg(soc, &h, metadata->files)) < 0)
-		GOTO(data_cleanup);
+	send_stream(soc, &metadata->filesa);
 
 	puts("waiting for metadata ack");
 	if ((ret = read_header()) < 0)
@@ -239,14 +232,14 @@ static int send_all_files(files_t *fs, int soc)
 		return -1;
 	}
 
-	files_iter it;
-	files_iter_init(&it, fs);
+	stream_iter_t it;
+	stream_iter_init(&it, &fs->filesa);
 	file_t *ne;
 	file_data_t fdata;
 
 	progress_bar_t p;
 
-	while ((ne = files_iter_next(&it))) {
+	while ((ne = stream_iter_next(&it))) {
 		if (ne->type == ft_dir)
 			continue;
 

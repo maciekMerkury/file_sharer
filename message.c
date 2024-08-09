@@ -56,7 +56,7 @@ request_data_t *create_request_message(const files_t *restrict files,
 
 	*data = (request_data_t){
 		.total_file_size = files->total_file_size,
-		.file_type = files->files[0].type,
+		.file_type = ((file_t *)files->filesa.data)[0].type,
 		.filename_size = filename_size,
 	};
 	memcpy(data->filename, root_dir_basename, filename_size);
@@ -66,13 +66,4 @@ error:
 	free(data);
 
 	return NULL;
-}
-
-void create_metadata_header(header_t *restrict header,
-			    const files_t *restrict files)
-{
-	*header = (header_t){
-		.type = mt_meta,
-		.data_size = files->files_size,
-	};
 }

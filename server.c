@@ -87,8 +87,7 @@ typedef struct client {
 	int socket;
 	char addr_str[INET_ADDRSTRLEN];
 	hello_data_t *info;
-	file_t *files_metadata;
-	size_t metadata_size;
+	stream_t filesa;
 } client_t;
 
 #define TIMEOUT 1000
@@ -219,18 +218,7 @@ bool confirm_transfer(client_t *client, char path[PATH_MAX])
 
 void recv_metadata(client_t *client)
 {
-	header_t header;
-	if (exchange_data_with_socket(client->socket, op_read, &header,
-				      sizeof(header_t), NULL) < 0)
-		ERR("recv");
-
-	assert(header.type == mt_meta);
-
-	client->metadata_size = header.data_size;
-	client->files_metadata = malloc(header.data_size);
-	if (exchange_data_with_socket(client->socket, op_read,
-				      client->files_metadata, header.data_size,
-				      NULL) < 0)
+	if (recv_stream(client->socket, &client->filesa) < 0)
 		ERR("recv");
 
 	header_t ack = { .type = mt_ack, .data_size = 0 };
@@ -241,9 +229,8 @@ void recv_metadata(client_t *client)
 
 void recv_data(client_t *client, char path[PATH_MAX])
 {
-	files_iter it;
-	files_iter_special_init(&it, client->files_metadata,
-				client->metadata_size);
+	stream_iter_t it;
+	stream_iter_init(&it, &client->filesa);
 
 	file_t *file;
 	file_data_t file_data;
@@ -252,7 +239,7 @@ void recv_data(client_t *client, char path[PATH_MAX])
 	char title[PATH_MAX];
 	struct timespec ts = { 0, 1e8 };
 	progress_bar_t bar;
-	while ((file = files_iter_next(&it))) {
+	while ((file = stream_iter_next(&it))) {
 		if (file->type == ft_dir) {
 			if (mkdir(file->path, file->permissions) < 0)
 				ERR("mkdir");
