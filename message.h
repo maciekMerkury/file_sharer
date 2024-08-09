@@ -9,9 +9,6 @@ typedef enum __attribute__((__packed__)) message_type {
 	mt_req,
 	mt_ack,
 	mt_nack,
-	mt_file,
-	mt_dir,
-	mt_meta,
 } message_type;
 
 static const char default_user_name[] = "(???)";

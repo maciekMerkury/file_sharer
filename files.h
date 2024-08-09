@@ -14,7 +14,7 @@ typedef struct file {
 	/* contains alignment padding */
 	/* relative to files_t.parent_dir */
 	size_t path_size;
-	char path[];
+	char rel_path[];
 } file_t;
 
 const char *get_file_type_name(file_type file_type);
@@ -23,17 +23,14 @@ typedef struct files {
 	off_t total_file_size;
 
 	/* null-terminated */
-	char *root_dir;
-	int root_dir_base;
+	char *parent_path;
+	size_t parent_path_len;
 
 	stream_t filesa;
 } files_t;
 
 int create_files(const char *path, files_t *files);
 void destroy_files(files_t *files);
-
-const char *get_parent_dir(const files_t *files);
-const char *get_root_dir_basename(const files_t *files);
 
 typedef struct file_data {
 	int fd;

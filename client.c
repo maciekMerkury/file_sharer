@@ -88,7 +88,6 @@ static int server_connect(int *dst_soc, struct in_addr addr, in_port_t port)
 {
 	int soc, ret = 0;
 
-	puts("soc");
 	if ((soc = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
 		perror("socket");
 		return -1;
@@ -114,20 +113,17 @@ static int server_connect(int *dst_soc, struct in_addr addr, in_port_t port)
 		goto soc_cleanup;
 	}
 
-	puts("send_msg");
 	if (send_msg(soc, &header, data) < 0) {
 		ret = -1;
 		goto hello_cleanup;
 	}
 
-	puts("get header");
 	if (exchange_data_with_socket(soc, op_read, &header, sizeof(header_t),
 				      NULL) < 0) {
 		ret = -1;
 		goto hello_cleanup;
 	}
 
-	puts("switch");
 	switch (header.type) {
 	case mt_ack:
 		ret = 0;
@@ -183,11 +179,9 @@ static int send_metadata(int soc, files_t *metadata)
 	if ((ret = send_msg(soc, &h, data)) < 0)
 		GOTO(data_cleanup);
 
-	puts("waiting for req ack");
 	if ((ret = read_header()) < 0)
 		GOTO(data_cleanup);
 
-	puts("req switch");
 	switch (h.type) {
 	case mt_ack:
 		ret = 0;
@@ -202,11 +196,9 @@ static int send_metadata(int soc, files_t *metadata)
 
 	send_stream(soc, &metadata->filesa);
 
-	puts("waiting for metadata ack");
 	if ((ret = read_header()) < 0)
 		GOTO(data_cleanup);
 
-	puts("meta switch");
 	switch (h.type) {
 	case mt_ack:
 		ret = 0;
@@ -227,7 +219,7 @@ data_cleanup:
 
 static int send_all_files(files_t *fs, int soc)
 {
-	if (chdir(get_parent_dir(fs)) < 0) {
+	if (chdir(fs->parent_path) < 0) {
 		perror("chdir");
 		return -1;
 	}
@@ -247,7 +239,7 @@ static int send_all_files(files_t *fs, int soc)
 			return -1;
 		}
 
-		prog_bar_init(&p, ne->path, ne->size,
+		prog_bar_init(&p, ne->rel_path, ne->size,
 			      (struct timespec){ .tv_nsec = 500e3 });
 
 		const int ret = exchange_data_with_socket(
@@ -263,17 +255,12 @@ static int send_all_files(files_t *fs, int soc)
 /* will do all the cleanup necessary */
 static int client_main(in_port_t port, struct in_addr addr, char *file_path)
 {
-	puts("fs");
 	files_t fs;
 	if (create_files(file_path, &fs) < 0) {
 		fprintf(stderr, "could not open file\n");
 		exit(EXIT_FAILURE);
 	}
 
-	printf("%s\n", get_root_dir_basename(&fs));
-	printf("%s\n", get_parent_dir(&fs));
-
-	puts("server");
 	int ret = EXIT_SUCCESS;
 	int server;
 	if (server_connect(&server, addr, port) != 0) {
@@ -294,8 +281,8 @@ static int client_main(in_port_t port, struct in_addr addr, char *file_path)
 	}
 
 	size_info size = bytes_to_size(fs.total_file_size);
-	printf("sending %s, size %.2lf%s\n", get_root_dir_basename(&fs),
-	       size.size, unit(size));
+	printf("sending %s, size %.2lf%s\n", ((file_t*)fs.filesa.data)->rel_path, size.size,
+	       unit(size));
 
 	if ((ret = send_all_files(&fs, server)) < 0) {
 		fprintf(stderr, "could not send all files\n");
