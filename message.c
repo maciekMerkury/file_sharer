@@ -40,7 +40,7 @@ error:
 request_data_t *create_request_message(const files_t *restrict files,
 				       header_t *restrict header)
 {
-	const char *root_dir_basename = get_root_dir_basename(files);
+	const char *root_dir_basename = files->files[0].rel_path;
 	const size_t filename_size = strlen(root_dir_basename) + 1;
 
 	const size_t req_size = sizeof(request_data_t) + filename_size;

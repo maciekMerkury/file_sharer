@@ -254,7 +254,7 @@ void recv_data(client_t *client, char path[PATH_MAX])
 	progress_bar_t bar;
 	while ((file = files_iter_next(&it))) {
 		if (file->type == ft_dir) {
-			if (mkdir(file->path, file->permissions) < 0)
+			if (mkdir(file->rel_path, file->permissions) < 0)
 				ERR("mkdir");
 			continue;
 		}
@@ -264,7 +264,7 @@ void recv_data(client_t *client, char path[PATH_MAX])
 		if (ftruncate(file_data.fd, file_data.size) < 0)
 			ERR("ftruncate");
 
-		snprintf(title, PATH_MAX, "Receiving %s", file->path);
+		snprintf(title, PATH_MAX, "Receiving %s", file->rel_path);
 		prog_bar_init(&bar, title, file_data.size, ts);
 
 		if (exchange_data_with_socket(client->socket, op_read,
