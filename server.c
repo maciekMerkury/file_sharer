@@ -5,6 +5,7 @@
 #include <linux/limits.h>
 #include <netinet/in.h>
 #include <poll.h>
+#include <pthread.h>
 #include <pwd.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -91,9 +92,10 @@ void read_args(int argc, char *argv[], uint16_t *port,
 }
 
 typedef struct client {
+	char *download_dir;
 	int socket;
 	char addr_str[INET_ADDRSTRLEN];
-	hello_data_t *info;
+	peer_info_t *info;
 	stream_t entries;
 } client_t;
 
@@ -123,7 +125,7 @@ int setup(uint16_t port)
 	return sock;
 }
 
-int recv_hello(client_t *client)
+int recv_info(client_t *client)
 {
 	struct pollfd p = {
 		.fd = client->socket,
@@ -138,28 +140,28 @@ int recv_hello(client_t *client)
 	}
 
 	header_t header;
-	hello_data_t *hello = NULL;
+	peer_info_t *info = NULL;
 
 	if (perf_soc_op(client->socket, op_read, &header, sizeof(header_t),
 			NULL) < 0)
 		return -1;
 
-	if (header.type != mt_hello) {
+	if (header.type != mt_pinfo) {
 		fprintf(stderr,
-			"Client from host %s didn't send a hello message\n",
+			"Client from host %s didn't send a peer info message\n",
 			client->addr_str);
 		return 1;
 	}
 
-	hello = malloc(header.data_size);
-	if (hello == NULL)
+	info = malloc(header.data_size);
+	if (info == NULL)
 		ERR_GOTO("malloc");
 
-	if (perf_soc_op(client->socket, op_read, hello, header.data_size,
-			NULL) < 0)
+	if (perf_soc_op(client->socket, op_read, info, header.data_size, NULL) <
+	    0)
 		goto error;
 
-	client->info = hello;
+	client->info = info;
 
 	header_t ack = {
 		.type = mt_ack,
@@ -169,33 +171,28 @@ int recv_hello(client_t *client)
 			NULL) < 0)
 		goto error;
 
+	printf("Client %s from address %s has connected\n",
+	       client->info->username, client->addr_str);
+
 	return 0;
 
 error:
-	free(hello);
+	free(info);
 	return -1;
 }
 
-bool accept_client(int sock, client_t *client)
+void accept_client(int soc, client_t *client)
 {
 	printf("Waiting for a new client\n");
 
 	struct sockaddr_in addr;
 	socklen_t len = sizeof(addr);
-	if ((client->socket = accept(sock, (struct sockaddr *)&addr, &len)) < 0)
+	if ((client->socket = accept(soc, (struct sockaddr *)&addr, &len)) < 0)
 		ERR_EXIT("accept");
 
 	if (!inet_ntop(AF_INET, &(addr.sin_addr), client->addr_str,
 		       INET_ADDRSTRLEN))
-		ERR_EXIT("inet_ntop");
-
-	if (recv_hello(client))
-		return false;
-
-	printf("Client %s from address %s has connected\n",
-	       client->info->username, client->addr_str);
-
-	return true;
+		PERROR("inet_ntop");
 }
 
 int confirm_transfer(client_t *client, char path[PATH_MAX])
@@ -312,8 +309,13 @@ void cleanup_client(client_t *client)
 	destroy_stream(&client->entries);
 }
 
-void handle_client(client_t *client, char downloads_directory[PATH_MAX])
+void *handle_client(void *arg)
 {
+	client_t *client = arg;
+
+	if (recv_info(client))
+		goto cleanup;
+
 	char path[PATH_MAX];
 
 	if (confirm_transfer(client, path))
@@ -322,10 +324,13 @@ void handle_client(client_t *client, char downloads_directory[PATH_MAX])
 	if (recv_metadata(client) < 0)
 		goto cleanup;
 
-	recv_data(client, downloads_directory);
+	recv_data(client, client->download_dir);
 
 cleanup:
 	cleanup_client(client);
+	free(client);
+
+	return NULL;
 }
 
 int main(int argc, char *argv[])
@@ -335,16 +340,26 @@ int main(int argc, char *argv[])
 
 	read_args(argc, argv, &port, downloads_directory);
 
-	int sock = setup(port);
+	int soc = setup(port);
+
+	pthread_attr_t attr;
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
 	while (true) {
-		client_t client = { 0 };
+		client_t *client = malloc(sizeof(client_t));
+		*client = (client_t){
+			.download_dir = downloads_directory
+		};
 
-		if (accept_client(sock, &client))
-			handle_client(&client, downloads_directory);
+		accept_client(soc, client);
+
+		pthread_t tid;
+		if (pthread_create(&tid, &attr, handle_client, client))
+			PERROR("ptrhead_create");
 	}
 
-	close(sock);
+	close(soc);
 
 	return EXIT_SUCCESS;
 }

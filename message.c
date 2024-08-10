@@ -8,21 +8,21 @@
 #include "entry.h"
 #include "message.h"
 
-hello_data_t *create_hello_message(header_t *header)
+peer_info_t *create_pinfo_message(header_t *header)
 {
 	char username[LOGIN_NAME_MAX];
 	if (getlogin_r(username, sizeof(username)) != 0)
 		memcpy(username, default_user_name, sizeof(default_user_name));
 
 	const size_t username_size = strlen(username) + 1;
-	const size_t data_size = sizeof(hello_data_t) + username_size;
+	const size_t data_size = sizeof(peer_info_t) + username_size;
 
-	hello_data_t *data = malloc(data_size);
+	peer_info_t *data = malloc(data_size);
 	if (data == NULL)
 		return NULL;
 
 	*header = (header_t){
-		.type = mt_hello,
+		.type = mt_pinfo,
 		.data_size = data_size,
 	};
 
