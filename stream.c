@@ -1,6 +1,7 @@
 #include "stream.h"
 #include "core.h"
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -18,7 +19,7 @@ void *stream_allocate(stream_t *stream, size_t size)
 		void *new_mem = realloc(stream->metadata.sizes,
 					stream->metadata.cap + resize);
 		if (new_mem == NULL)
-			CORE_ERR("realloc");
+			ERR_GOTO("realloc");
 		stream->metadata.sizes = new_mem;
 		stream->metadata.cap += resize;
 	}
@@ -29,7 +30,7 @@ void *stream_allocate(stream_t *stream, size_t size)
 					      stream->cap;
 		void *new_mem = realloc(stream->data, stream->cap + resize);
 		if (new_mem == NULL)
-			CORE_ERR("realloc");
+			ERR_GOTO("realloc");
 		stream->data = new_mem;
 		stream->cap += resize;
 	}
@@ -121,14 +122,22 @@ int recv_stream(int soc, stream_t *restrict stream)
 	};
 
 	if (stream->metadata.sizes == NULL || stream->data == NULL)
-		return -1;
+		ERR_GOTO("malloc");
 
 	if (perf_soc_op(soc, op_read, stream->metadata.sizes,
 			sinfo.len * sizeof(size_t), NULL) < 0)
-		return -1;
+		goto error;
 
 	if (perf_soc_op(soc, op_read, stream->data, sinfo.size, NULL) < 0)
-		return -1;
+		goto error;
 
 	return 0;
+
+error:
+	free(stream->metadata.sizes);
+	free(stream->data);
+
+	*stream = (stream_t){ 0 };
+
+	return -1;
 }

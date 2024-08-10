@@ -1,9 +1,9 @@
 #define _GNU_SOURCE
-#include <linux/limits.h>
-#include <libgen.h>
 #include <assert.h>
 #include <fcntl.h>
 #include <ftw.h>
+#include <libgen.h>
+#include <linux/limits.h>
 #include <stdalign.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,20 +31,23 @@ static int fn(const char *path, const struct stat *s, int flags, struct FTW *f)
 	if (flags != FTW_F && flags != FTW_D) {
 		fprintf(stderr,
 			"file `%s` is an unsupported file type "
-			"or an error occurred while reading it",
+			"or an error occurred while reading it\n",
 			path);
 		return 0;
 	}
 
 	if (!realpath(path, buf))
-		CORE_ERR("realpath");
+		ERR_GOTO("realpath");
 
 	if (strstr(buf, files->parent_path) != buf) {
-		fprintf(stderr, "symlinks are not supported: %s\n", path);
+		fprintf(stderr,
+			"symlinks outside of the root folder "
+			"are not supported: %s\n",
+			path);
 		return 0;
 	}
 
-	char *relative_path = buf + files->parent_path_len;
+	const char *relative_path = buf + files->parent_path_len;
 	if (files->parent_path[files->parent_path_len] != '/')
 		++relative_path;
 
@@ -54,6 +57,8 @@ static int fn(const char *path, const struct stat *s, int flags, struct FTW *f)
 	const size_t struct_size = sizeof(file_t) + path_size;
 
 	file_t *new_file = stream_allocate(&files->filesa, struct_size);
+	if (new_file == NULL)
+		goto error;
 
 	*new_file = (file_t){
 		.type = flags == FTW_F ? ft_reg : ft_dir,
@@ -65,10 +70,8 @@ static int fn(const char *path, const struct stat *s, int flags, struct FTW *f)
 
 	files->total_file_size += new_file->size;
 
-	return 0;
-
 error:
-	return -1;
+	return 0;
 }
 
 int create_files(const char *path, files_t *f)
@@ -77,14 +80,14 @@ int create_files(const char *path, files_t *f)
 	files = f;
 
 	if (!(files->parent_path = realpath(path, NULL)))
-		CORE_ERR("realpath");
+		ERR_GOTO("realpath");
 
 	// dirname modifies path argument
 	files->parent_path = dirname(files->parent_path);
 	files->parent_path_len = strlen(files->parent_path);
 
 	if (nftw(path, &fn, MAX_FD, 0) < 0)
-		CORE_ERR("nftw");
+		ERR_GOTO("nftw");
 
 	return 0;
 
@@ -115,10 +118,8 @@ int open_and_map_file(file_t *file, file_data_t *file_data,
 	};
 
 	if ((file_data->fd =
-		     open(file->rel_path, open_flags, file->permissions)) < 0) {
-		fprintf(stderr, "rp: %s\n", file->rel_path);
-		CORE_ERR("open");
-	}
+		     open(file->rel_path, open_flags, file->permissions)) < 0)
+		ERR_GOTO("open");
 
 	if (file_data->size == 0)
 		return 0;
@@ -126,7 +127,7 @@ int open_and_map_file(file_t *file, file_data_t *file_data,
 	if ((file_data->map = mmap(NULL, file_data->size, map_flags,
 				   MAP_FILE | MAP_SHARED, file_data->fd, 0)) ==
 	    MAP_FAILED)
-		CORE_ERR("mmap");
+		ERR_GOTO("mmap");
 
 	return 0;
 

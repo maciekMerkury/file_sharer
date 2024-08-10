@@ -11,15 +11,15 @@
 hello_data_t *create_hello_message(header_t *header)
 {
 	char username[LOGIN_NAME_MAX];
-	if (getlogin_r(username, sizeof(username)) != 0) {
+	if (getlogin_r(username, sizeof(username)) != 0)
 		memcpy(username, default_user_name, sizeof(default_user_name));
-	}
+
 	const size_t username_size = strlen(username) + 1;
 	const size_t data_size = sizeof(hello_data_t) + username_size;
 
 	hello_data_t *data = malloc(data_size);
 	if (data == NULL)
-		CORE_ERR("malloc");
+		return NULL;
 
 	*header = (header_t){
 		.type = mt_hello,
@@ -30,11 +30,6 @@ hello_data_t *create_hello_message(header_t *header)
 	memcpy(data->username, username, username_size);
 
 	return data;
-
-error:
-	free(data);
-
-	return NULL;
 }
 
 request_data_t *create_request_message(const files_t *restrict files,
@@ -45,10 +40,10 @@ request_data_t *create_request_message(const files_t *restrict files,
 	const size_t filename_size = strlen(root_dir_basename) + 1;
 
 	const size_t req_size = sizeof(request_data_t) + filename_size;
-	request_data_t *data = malloc(req_size);
 
+	request_data_t *data = malloc(req_size);
 	if (data == NULL)
-		CORE_ERR("malloc");
+		return NULL;
 
 	*header = (header_t){
 		.type = mt_req,
@@ -63,10 +58,6 @@ request_data_t *create_request_message(const files_t *restrict files,
 	memcpy(data->filename, root_dir_basename, filename_size);
 
 	return data;
-error:
-	free(data);
-
-	return NULL;
 }
 
 int send_msg(int soc, header_t *h, void *data)
@@ -86,16 +77,16 @@ int receive_msg(int soc, header_t *restrict h, void *restrict *data)
 		return -1;
 
 	*data = realloc(*data, h->data_size);
+	if (!*data)
+		ERR_GOTO("realloc");
 
-	if (!*data) {
-		perror("realloc");
-		return -1;
-	}
-
-	if (perf_soc_op(soc, op_read, *data, h->data_size, NULL) < 0) {
-		free(*data);
-		return -1;
-	}
+	if (perf_soc_op(soc, op_read, *data, h->data_size, NULL) < 0)
+		goto error;
 
 	return 0;
+
+error:
+	free(*data);
+
+	return -1;
 }
