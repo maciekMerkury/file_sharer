@@ -13,8 +13,8 @@ typedef struct stream {
 	void *data;
 } stream_t;
 
-void *stream_allocate(stream_t *stream, size_t size);
-void stream_destroy(stream_t *stream);
+void *stream_add_item(stream_t *stream, size_t size);
+void destroy_stream(stream_t *stream);
 
 typedef struct stream_iter {
 	const stream_t *stream;

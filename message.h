@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <sys/types.h>
 
-#include "files.h"
+#include "entry.h"
 
 typedef enum __attribute__((__packed__)) message_type {
 	mt_hello,
@@ -27,7 +27,7 @@ typedef struct hello_data {
 
 typedef struct request_data {
 	off_t total_file_size;
-	file_type file_type;
+	entry_type entry_type;
 
 	/* includes the null byte */
 	size_t filename_size;
@@ -36,12 +36,9 @@ typedef struct request_data {
 
 hello_data_t *create_hello_message(header_t *header);
 
-request_data_t *create_request_message(const files_t *restrict files,
+request_data_t *create_request_message(const entries_t *restrict entries,
 				       header_t *restrict header);
 
 int send_msg(int soc, header_t *h, void *data);
 /* data must be either NULL or ptr to malloced memory */
 int receive_msg(int soc, header_t *restrict h, void *restrict *data);
-
-void create_metadata_header(header_t *restrict header,
-			    const files_t *restrict files);
