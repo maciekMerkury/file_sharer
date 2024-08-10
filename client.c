@@ -14,7 +14,7 @@
 #include <unistd.h>
 
 #include "core.h"
-#include "files.h"
+#include "entry.h"
 #include "message.h"
 #include "progress_bar.h"
 
@@ -164,7 +164,7 @@ soc_cleanup:
  *      0 on server accepting
  *      1 on server rejecting
  */
-static int send_metadata(int soc, files_t *metadata)
+static int send_metadata(int soc, entries_t *metadata)
 {
 	header_t h;
 
@@ -192,7 +192,7 @@ static int send_metadata(int soc, files_t *metadata)
 		GOTO(data_cleanup);
 	}
 
-	send_stream(soc, &metadata->filesa);
+	send_stream(soc, &metadata->entries);
 
 	if ((ret = read_header()) < 0)
 		GOTO(data_cleanup);
@@ -215,7 +215,7 @@ data_cleanup:
 	return ret;
 }
 
-static int send_all_files(files_t *fs, int soc)
+static int send_all_files(entries_t *fs, int soc)
 {
 	if (chdir(fs->parent_path) < 0) {
 		perror("chdir");
@@ -223,17 +223,17 @@ static int send_all_files(files_t *fs, int soc)
 	}
 
 	stream_iter_t it;
-	stream_iter_init(&it, &fs->filesa);
-	file_t *ne;
-	file_data_t fdata;
+	stream_iter_init(&it, &fs->entries);
+	entry_t *ne;
+	entry_handles_t fdata;
 
 	progress_bar_t p;
 
 	while ((ne = stream_iter_next(&it))) {
-		if (ne->type == ft_dir)
+		if (ne->type == et_dir)
 			continue;
 
-		if (open_and_map_file(ne, &fdata, op_read) < 0) {
+		if (get_entry_handles(ne, &fdata, op_read) < 0) {
 			return -1;
 		}
 
@@ -242,7 +242,7 @@ static int send_all_files(files_t *fs, int soc)
 
 		const int ret =
 			perf_soc_op(soc, op_write, fdata.map, fdata.size, &p);
-		destroy_file_data(&fdata);
+		close_entry_handles(&fdata);
 		if (ret < 0)
 			return -1;
 	}
@@ -253,8 +253,8 @@ static int send_all_files(files_t *fs, int soc)
 /* will do all the cleanup necessary */
 static int client_main(in_port_t port, struct in_addr addr, char *file_path)
 {
-	files_t fs;
-	if (create_files(file_path, &fs) < 0) {
+	entries_t fs;
+	if (create_entries(file_path, &fs) < 0) {
 		fprintf(stderr, "could not open file\n");
 		exit(EXIT_FAILURE);
 	}
@@ -280,7 +280,7 @@ static int client_main(in_port_t port, struct in_addr addr, char *file_path)
 
 	size_info size = bytes_to_size(fs.total_file_size);
 	printf("sending %s, size %.2lf%s\n",
-	       ((file_t *)fs.filesa.data)->rel_path, size.size, unit(size));
+	       ((entry_t *)fs.entries.data)->rel_path, size.size, unit(size));
 
 	if ((ret = send_all_files(&fs, server)) < 0) {
 		fprintf(stderr, "could not send all files\n");
@@ -293,7 +293,7 @@ server_cleanup:
 	close(server);
 
 fs_cleanup:
-	destroy_files(&fs);
+	destroy_entries(&fs);
 
 	return ret;
 }

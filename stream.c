@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-void *stream_allocate(stream_t *stream, size_t size)
+void *stream_add_item(stream_t *stream, size_t size)
 {
 	const bool resize_metadata =
 		(stream->metadata.len + 1) * sizeof(size_t) >
@@ -47,7 +47,7 @@ error:
 	return NULL;
 }
 
-void stream_destroy(stream_t *stream)
+void destroy_stream(stream_t *stream)
 {
 	free(stream->metadata.sizes);
 	free(stream->data);

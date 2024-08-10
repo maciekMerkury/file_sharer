@@ -18,7 +18,7 @@
 #include <unistd.h>
 
 #include "core.h"
-#include "files.h"
+#include "entry.h"
 #include "message.h"
 #include "progress_bar.h"
 
@@ -94,7 +94,7 @@ typedef struct client {
 	int socket;
 	char addr_str[INET_ADDRSTRLEN];
 	hello_data_t *info;
-	stream_t filesa;
+	stream_t entries;
 } client_t;
 
 #define TIMEOUT 1000
@@ -220,7 +220,7 @@ int confirm_transfer(client_t *client, char path[PATH_MAX])
 	size_info size = bytes_to_size(request->total_file_size);
 	printf("Do you want to receive %s `%.255s` of size %.2lf %s"
 	       " from user %s at host %s [Y/n] ",
-	       get_file_type_name(request->file_type), request->filename,
+	       get_entry_type_name(request->entry_type), request->filename,
 	       size.size, unit(size), client->info->username, client->addr_str);
 
 	char *line = NULL;
@@ -253,7 +253,7 @@ error:
 
 int recv_metadata(client_t *client)
 {
-	if (recv_stream(client->socket, &client->filesa) < 0)
+	if (recv_stream(client->socket, &client->entries) < 0)
 		return -1;
 
 	header_t ack = { .type = mt_ack, .data_size = 0 };
@@ -267,37 +267,37 @@ int recv_metadata(client_t *client)
 void recv_data(client_t *client, char path[PATH_MAX])
 {
 	stream_iter_t it;
-	stream_iter_init(&it, &client->filesa);
+	stream_iter_init(&it, &client->entries);
 
-	file_t *file;
-	file_data_t file_data;
+	entry_t *entry;
+	entry_handles_t entry_handles;
 	chdir(path);
 
 	const char *title_format = "Receiving %s";
 	char title[PATH_MAX + 10];
 	struct timespec ts = { 0, 1e8 };
 	progress_bar_t bar;
-	while ((file = stream_iter_next(&it))) {
-		if (file->type == ft_dir) {
-			if (mkdir(file->rel_path, file->permissions) < 0)
+	while ((entry = stream_iter_next(&it))) {
+		if (entry->type == et_dir) {
+			if (mkdir(entry->rel_path, entry->permissions) < 0)
 				PERROR("mkdir");
 			continue;
 		}
 
-		if (open_and_map_file(file, &file_data, op_write) < 0)
+		if (get_entry_handles(entry, &entry_handles, op_write) < 0)
 			continue;
-		if (ftruncate(file_data.fd, file_data.size) < 0)
+		if (ftruncate(entry_handles.fd, entry_handles.size) < 0)
 			ERR_GOTO("ftruncate");
 
-		snprintf(title, sizeof(title), title_format, file->rel_path);
-		prog_bar_init(&bar, title, file_data.size, ts);
+		snprintf(title, sizeof(title), title_format, entry->rel_path);
+		prog_bar_init(&bar, title, entry_handles.size, ts);
 
-		if (perf_soc_op(client->socket, op_read, file_data.map,
-				file_data.size, &bar) < 0)
+		if (perf_soc_op(client->socket, op_read, entry_handles.map,
+				entry_handles.size, &bar) < 0)
 			goto error;
 
 error:
-		destroy_file_data(&file_data);
+		close_entry_handles(&entry_handles);
 	}
 }
 
@@ -309,7 +309,7 @@ void cleanup_client(client_t *client)
 	       client->addr_str);
 
 	free(client->info);
-	stream_destroy(&client->filesa);
+	destroy_stream(&client->entries);
 }
 
 void handle_client(client_t *client, char downloads_directory[PATH_MAX])
