@@ -107,8 +107,8 @@ static int server_connect(int *dst_soc, struct in_addr addr, in_port_t port)
 	}
 
 	header_t header;
-	hello_data_t *data;
-	if (!(data = create_hello_message(&header))) {
+	peer_info_t *data;
+	if (!(data = create_pinfo_message(&header))) {
 		ret = -1;
 		goto soc_cleanup;
 	}
