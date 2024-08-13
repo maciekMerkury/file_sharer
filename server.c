@@ -5,6 +5,7 @@
 #include <linux/limits.h>
 #include <netinet/in.h>
 #include <poll.h>
+#include <pthread.h>
 #include <pwd.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -20,6 +21,7 @@
 #include "core.h"
 #include "entry.h"
 #include "message.h"
+#include "notification.h"
 #include "progress_bar.h"
 
 typedef struct {
@@ -217,20 +219,9 @@ int confirm_transfer(client_t *client, char path[PATH_MAX])
 			NULL) < 0)
 		goto error;
 
-	size_info size = bytes_to_size(request->total_file_size);
-	printf("Do you want to receive %s `%.255s` of size %.2lf %s"
-	       " from user %s at host %s [Y/n] ",
-	       get_entry_type_name(request->entry_type), request->filename,
-	       size.size, unit(size), client->info->username, client->addr_str);
-
-	char *line = NULL;
-	size_t len;
-	if (getline(&line, &len, stdin) < 0)
-		ERR_GOTO("getline");
-
-	char c = line[0];
-	const bool accept = c == 'y' || c == 'Y' || c == '\n';
-	free(line);
+	const bool accept = request_notification(client->info->username,
+						 client->addr_str,
+						 request) == rr_accept;
 
 	header_t res = {
 		.type = accept ? mt_ack : mt_nack,
@@ -330,6 +321,8 @@ cleanup:
 
 int main(int argc, char *argv[])
 {
+	notifications_init("file-sharer server");
+
 	char downloads_directory[PATH_MAX];
 	uint16_t port;
 
@@ -344,6 +337,7 @@ int main(int argc, char *argv[])
 			handle_client(&client, downloads_directory);
 	}
 
+	notifications_deinit();
 	close(sock);
 
 	return EXIT_SUCCESS;
