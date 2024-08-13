@@ -219,12 +219,15 @@ int confirm_transfer(client_t *client, char path[PATH_MAX])
 			NULL) < 0)
 		goto error;
 
-	const bool accept = request_notification(client->info->username,
-						 client->addr_str,
-						 request) == rr_accept;
+	int ret;
+	if ((ret = request_notification(client->info->username,
+					client->addr_str, request->entry_type,
+					request->total_file_size,
+					request->filename)) < 0)
+		goto error;
 
 	header_t res = {
-		.type = accept ? mt_ack : mt_nack,
+		.type = ret == 0 ? mt_ack : mt_nack,
 		.data_size = 0,
 	};
 
@@ -234,7 +237,7 @@ int confirm_transfer(client_t *client, char path[PATH_MAX])
 
 	free(request);
 
-	return accept ? 0 : 1;
+	return ret;
 
 error:
 	free(request);
@@ -314,6 +317,11 @@ void handle_client(client_t *client, char downloads_directory[PATH_MAX])
 		goto cleanup;
 
 	recv_data(client, downloads_directory);
+
+	const entry_t *entry = ((entry_t *)client->entries.data);
+	const size_t file_count = client->entries.metadata.len;
+	transfer_complete_notification(entry->type, entry->rel_path,
+				       file_count);
 
 cleanup:
 	cleanup_client(client);

@@ -294,6 +294,7 @@ server_cleanup:
 
 fs_cleanup:
 	destroy_entries(&fs);
+	free(file_path);
 
 	return ret;
 }
