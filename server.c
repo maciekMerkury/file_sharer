@@ -258,8 +258,10 @@ int recv_metadata(client_t *client)
 	return 0;
 }
 
-void recv_data(client_t *client, char path[PATH_MAX])
+int recv_data(client_t *client, char path[PATH_MAX])
 {
+	int received_files = 0;
+
 	stream_iter_t it;
 	stream_iter_init(&it, &client->entries);
 
@@ -273,13 +275,19 @@ void recv_data(client_t *client, char path[PATH_MAX])
 	progress_bar_t bar;
 	while ((entry = stream_iter_next(&it))) {
 		if (entry->type == et_dir) {
-			if (mkdir(entry->rel_path, entry->permissions) < 0)
+			if (mkdir(entry->rel_path, entry->permissions) < 0) {
+				transfer_error_notification(strerror(errno));
 				PERROR("mkdir");
+			}
+
 			continue;
 		}
 
-		if (get_entry_handles(entry, &entry_handles, op_write) < 0)
+		if (get_entry_handles(entry, &entry_handles, op_write) < 0) {
+			transfer_error_notification(strerror(errno));
 			continue;
+		}
+
 		if (ftruncate(entry_handles.fd, entry_handles.size) < 0)
 			ERR_GOTO("ftruncate");
 
@@ -290,9 +298,12 @@ void recv_data(client_t *client, char path[PATH_MAX])
 				entry_handles.size, &bar) < 0)
 			goto error;
 
+		received_files++;
 error:
 		close_entry_handles(&entry_handles);
 	}
+
+	return received_files;
 }
 
 void cleanup_client(client_t *client)
@@ -316,12 +327,11 @@ void handle_client(client_t *client, char downloads_directory[PATH_MAX])
 	if (recv_metadata(client) < 0)
 		goto cleanup;
 
-	recv_data(client, downloads_directory);
+	int received_files = recv_data(client, downloads_directory);
 
 	const entry_t *entry = ((entry_t *)client->entries.data);
-	const size_t file_count = client->entries.metadata.len;
 	transfer_complete_notification(entry->type, entry->rel_path,
-				       file_count);
+				       received_files);
 
 cleanup:
 	cleanup_client(client);

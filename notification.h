@@ -11,3 +11,4 @@ int request_notification(const char username[],
 			 const char filename[]);
 int transfer_complete_notification(entry_type entry_type, const char filename[],
 				   unsigned file_count);
+int transfer_error_notification(const char body[]);

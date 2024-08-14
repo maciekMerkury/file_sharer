@@ -76,6 +76,7 @@ void notifications_deinit(void)
 {
 	g_main_loop_unref(loop);
 	loop = NULL;
+	notify_uninit();
 }
 
 int request_notification(const char username[],
@@ -109,7 +110,7 @@ int request_notification(const char username[],
 				       &res, NULL);
 	g_signal_connect(n, "closed", G_CALLBACK(closed_callback), &res);
 
-	GError *err;
+	GError *err = NULL;
 	if (!notify_notification_show(n, &err)) {
 		GERROR(err);
 		return -1;
@@ -128,7 +129,7 @@ int transfer_complete_notification(entry_type entry_type, const char filename[],
 	snprintf(details, 223, "Downloaded %u files in total", file_count);
 
 	char body[256];
-	snprintf(body, 256, "Download of %s `%s` was successfull %s",
+	snprintf(body, 256, "Download of %s `%s` completed %s",
 		 get_entry_type_name(entry_type), filename,
 		 file_count > 1 ? details : "");
 
@@ -136,7 +137,22 @@ int transfer_complete_notification(entry_type entry_type, const char filename[],
 		"File Transfer Complete", body, "folder-download");
 	notify_notification_set_category(n, "transfer.complete");
 
-	GError *err;
+	GError *err = NULL;
+	if (!notify_notification_show(n, &err)) {
+		GERROR(err);
+		return -1;
+	}
+
+	return 0;
+}
+
+int transfer_error_notification(const char body[])
+{
+	NotifyNotification *n = notify_notification_new(
+		"File Transfer Error", body, "folder-download");
+	notify_notification_set_category(n, "transfer.error");
+
+	GError *err = NULL;
 	if (!notify_notification_show(n, &err)) {
 		GERROR(err);
 		return -1;
