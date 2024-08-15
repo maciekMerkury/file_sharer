@@ -1,20 +1,32 @@
 #pragma once
 #include <sys/types.h>
 
+typedef struct vector {
+	size_t item_size;
+
+	size_t cap;
+	size_t len;
+	void *data;
+} vector_t;
+
+void create_vector(vector_t *vector, size_t item_size);
+void destroy_vector(vector_t *vector);
+
+void *vector_get_item(const vector_t *vector, size_t index);
+void *vector_add_item(vector_t *vector);
+
 typedef struct stream {
-	struct offsets {
-		size_t cap;
-		size_t len;
-		size_t *sizes;
-	} metadata;
+	vector_t metadata;
 
 	size_t cap;
 	size_t size;
 	void *data;
 } stream_t;
 
-void *stream_add_item(stream_t *stream, size_t size);
+void create_stream(stream_t *stream);
 void destroy_stream(stream_t *stream);
+
+void *stream_add_item(stream_t *stream, size_t size);
 
 typedef struct stream_iter {
 	const stream_t *stream;

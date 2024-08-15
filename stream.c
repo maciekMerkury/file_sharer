@@ -5,24 +5,55 @@
 #include <stdint.h>
 #include <stdio.h>
 
-void *stream_add_item(stream_t *stream, size_t size)
+void create_vector(vector_t *vector, size_t item_size)
 {
-	const bool resize_metadata =
-		(stream->metadata.len + 1) * sizeof(size_t) >
-		stream->metadata.cap;
-	const bool resize = stream->size + size > stream->cap;
+	*vector = (vector_t){ .item_size = item_size };
+}
 
-	if (resize_metadata) {
-		const size_t resize = stream->metadata.cap == 0 ?
-					      sizeof(size_t) :
-					      stream->metadata.cap;
-		void *new_mem = realloc(stream->metadata.sizes,
-					stream->metadata.cap + resize);
+void destroy_vector(vector_t *vector)
+{
+	free(vector->data);
+}
+
+void *vector_get_item(const vector_t *vector, size_t index)
+{
+	return (void *)((uintptr_t)vector->data + index * vector->item_size);
+}
+
+void *vector_add_item(vector_t *vector)
+{
+	if ((vector->len + 1) * vector->item_size > vector->cap) {
+		const size_t resize = vector->cap == 0 ? vector->item_size :
+							 vector->cap;
+		void *new_mem = realloc(vector->data, vector->cap + resize);
 		if (new_mem == NULL)
 			ERR_GOTO("realloc");
-		stream->metadata.sizes = new_mem;
-		stream->metadata.cap += resize;
+		vector->data = new_mem;
+		vector->cap += resize;
 	}
+
+	vector->len++;
+	return vector_get_item(vector, vector->len - 1);
+
+error:
+	return NULL;
+}
+
+void create_stream(stream_t *stream)
+{
+	*stream = (stream_t){ 0 };
+	create_vector(&stream->metadata, sizeof(size_t));
+}
+
+void destroy_stream(stream_t *stream)
+{
+	destroy_vector(&stream->metadata);
+	free(stream->data);
+}
+
+void *stream_add_item(stream_t *stream, size_t size)
+{
+	const bool resize = stream->size + size > stream->cap;
 
 	if (resize) {
 		const size_t resize = stream->size + size > stream->cap * 2 ?
@@ -35,8 +66,7 @@ void *stream_add_item(stream_t *stream, size_t size)
 		stream->cap += resize;
 	}
 
-	stream->metadata.sizes[stream->metadata.len] = size;
-	stream->metadata.len++;
+	*(size_t *)vector_add_item(&stream->metadata) = size;
 
 	void *ret = (void *)((uintptr_t)stream->data + stream->size);
 	stream->size += size;
@@ -45,12 +75,6 @@ void *stream_add_item(stream_t *stream, size_t size)
 
 error:
 	return NULL;
-}
-
-void destroy_stream(stream_t *stream)
-{
-	free(stream->metadata.sizes);
-	free(stream->data);
 }
 
 void stream_iter_init(stream_iter_t *it, const stream_t *stream)
@@ -70,7 +94,8 @@ void *stream_iter_next(stream_iter_t *it)
 		return NULL;
 
 	it->curr = (void *)((uintptr_t)it->curr +
-			    it->stream->metadata.sizes[it->i]);
+			    *(size_t *)vector_get_item(&it->stream->metadata,
+						       it->i));
 	it->i++;
 
 	return curr;
@@ -92,7 +117,7 @@ int send_stream(int soc, stream_t *restrict stream)
 			NULL) < 0)
 		return -1;
 
-	if (perf_soc_op(soc, op_write, stream->metadata.sizes,
+	if (perf_soc_op(soc, op_write, stream->metadata.data,
 			sinfo.len * sizeof(size_t), NULL) < 0)
 		return -1;
 
@@ -112,19 +137,20 @@ int recv_stream(int soc, stream_t *restrict stream)
 
 	*stream = (stream_t){
 		.metadata = {
+			.item_size = sizeof(size_t),
 			.cap = sinfo.len * sizeof(size_t),
 			.len = sinfo.len,
-			.sizes = malloc(sinfo.len * sizeof(size_t)),
+			.data = malloc(sinfo.len * sizeof(size_t)),
 		},
 		.cap = sinfo.size,
 		.size = sinfo.size,
 		.data = malloc(sinfo.size),
 	};
 
-	if (stream->metadata.sizes == NULL || stream->data == NULL)
+	if (stream->metadata.data == NULL || stream->data == NULL)
 		ERR_GOTO("malloc");
 
-	if (perf_soc_op(soc, op_read, stream->metadata.sizes,
+	if (perf_soc_op(soc, op_read, stream->metadata.data,
 			sinfo.len * sizeof(size_t), NULL) < 0)
 		goto error;
 
@@ -134,7 +160,7 @@ int recv_stream(int soc, stream_t *restrict stream)
 	return 0;
 
 error:
-	free(stream->metadata.sizes);
+	free(stream->metadata.data);
 	free(stream->data);
 
 	*stream = (stream_t){ 0 };

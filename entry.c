@@ -13,6 +13,7 @@
 
 #include "core.h"
 #include "entry.h"
+#include "stream.h"
 
 #define MAX_FD 20
 
@@ -78,6 +79,7 @@ int create_entries(const char *path, entries_t *e)
 {
 	*e = (entries_t){ 0 };
 	entries = e;
+	create_stream(&entries->entries);
 
 	if (!(entries->parent_path = realpath(path, NULL)))
 		ERR_GOTO("realpath");
