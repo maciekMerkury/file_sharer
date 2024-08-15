@@ -1,6 +1,10 @@
 #pragma once
 
-void log_init(const char path[]);
+void logger_init(const char path[]);
+void logger_deinit(void);
+
+void logger_add_thread(void);
+void logger_remove_thread(void);
 
 void log_call(int line, const char *file, const char *func);
 void log_error(int line, const char *file, const char *func);
