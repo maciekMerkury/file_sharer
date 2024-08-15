@@ -348,9 +348,7 @@ int main(int argc, char *argv[])
 
 	while (true) {
 		client_t *client = malloc(sizeof(client_t));
-		*client = (client_t){
-			.download_dir = downloads_directory
-		};
+		*client = (client_t){ .download_dir = downloads_directory };
 
 		accept_client(soc, client);
 
