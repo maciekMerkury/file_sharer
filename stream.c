@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 void create_vector(vector_t *vector, size_t item_size)
 {
@@ -13,11 +14,6 @@ void create_vector(vector_t *vector, size_t item_size)
 void destroy_vector(vector_t *vector)
 {
 	free(vector->data);
-}
-
-void *vector_get_item(const vector_t *vector, size_t index)
-{
-	return (void *)((uintptr_t)vector->data + index * vector->item_size);
 }
 
 void *vector_add_item(vector_t *vector)
@@ -33,10 +29,29 @@ void *vector_add_item(vector_t *vector)
 	}
 
 	vector->len++;
-	return vector_get_item(vector, vector->len - 1);
+	return (void *)((uintptr_t)vector->data +
+			(vector->len - 1) * vector->item_size);
 
 error:
 	return NULL;
+}
+
+int vector_copy(vector_t *dest, const vector_t *src)
+{
+	*dest = (vector_t){ .item_size = src->item_size,
+			    .cap = src->len * src->item_size,
+			    .len = src->len,
+			    .data = malloc(src->len * src->item_size) };
+
+	if (dest->data == NULL)
+		ERR_GOTO("malloc");
+
+	memcpy(dest->data, src->data, dest->cap);
+
+	return 0;
+
+error:
+	return -1;
 }
 
 void create_stream(stream_t *stream)
@@ -94,8 +109,7 @@ void *stream_iter_next(stream_iter_t *it)
 		return NULL;
 
 	it->curr = (void *)((uintptr_t)it->curr +
-			    *(size_t *)vector_get_item(&it->stream->metadata,
-						       it->i));
+			    ((size_t *)it->stream->metadata.data)[it->i]);
 	it->i++;
 
 	return curr;

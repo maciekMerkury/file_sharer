@@ -12,8 +12,8 @@ typedef struct vector {
 void create_vector(vector_t *vector, size_t item_size);
 void destroy_vector(vector_t *vector);
 
-void *vector_get_item(const vector_t *vector, size_t index);
 void *vector_add_item(vector_t *vector);
+int vector_copy(vector_t *dest, const vector_t *src);
 
 typedef struct stream {
 	vector_t metadata;
