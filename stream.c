@@ -1,9 +1,11 @@
-#include "stream.h"
 #include "core.h"
+#include "log.h"
+#include "stream.h"
 
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 void create_vector(vector_t *vector, size_t item_size)
@@ -22,8 +24,8 @@ void *vector_add_item(vector_t *vector)
 		const size_t resize = vector->cap == 0 ? vector->item_size :
 							 vector->cap;
 		void *new_mem = realloc(vector->data, vector->cap + resize);
-		if (new_mem == NULL)
-			ERR_GOTO("realloc");
+		if (LOG_PERROR(new_mem == NULL, "realloc"))
+			return NULL;
 		vector->data = new_mem;
 		vector->cap += resize;
 	}
@@ -31,9 +33,6 @@ void *vector_add_item(vector_t *vector)
 	vector->len++;
 	return (void *)((uintptr_t)vector->data +
 			(vector->len - 1) * vector->item_size);
-
-error:
-	return NULL;
 }
 
 int vector_copy(vector_t *dest, const vector_t *src)
@@ -43,15 +42,12 @@ int vector_copy(vector_t *dest, const vector_t *src)
 			    .len = src->len,
 			    .data = malloc(src->len * src->item_size) };
 
-	if (dest->data == NULL)
-		ERR_GOTO("malloc");
+	if (LOG_PERROR(dest->data == NULL, "malloc"))
+		return -1;
 
 	memcpy(dest->data, src->data, dest->cap);
 
 	return 0;
-
-error:
-	return -1;
 }
 
 void create_stream(stream_t *stream)
@@ -75,8 +71,8 @@ void *stream_add_item(stream_t *stream, size_t size)
 					      size :
 					      stream->cap;
 		void *new_mem = realloc(stream->data, stream->cap + resize);
-		if (new_mem == NULL)
-			ERR_GOTO("realloc");
+		if (LOG_PERROR(new_mem == NULL, "realloc"))
+			return NULL;
 		stream->data = new_mem;
 		stream->cap += resize;
 	}
@@ -87,9 +83,6 @@ void *stream_add_item(stream_t *stream, size_t size)
 	stream->size += size;
 
 	return ret;
-
-error:
-	return NULL;
 }
 
 void stream_iter_init(stream_iter_t *it, const stream_t *stream)
@@ -127,15 +120,16 @@ int send_stream(int soc, stream_t *restrict stream)
 		.size = stream->size,
 	};
 
-	if (perf_soc_op(soc, op_write, &sinfo, sizeof(struct stream_info),
-			NULL) < 0)
+	if (LOG_CALL(perf_soc_op(soc, op_write, &sinfo,
+				 sizeof(struct stream_info), NULL) < 0))
 		return -1;
 
-	if (perf_soc_op(soc, op_write, stream->metadata.data,
-			sinfo.len * sizeof(size_t), NULL) < 0)
+	if (LOG_CALL(perf_soc_op(soc, op_write, stream->metadata.data,
+				 sinfo.len * sizeof(size_t), NULL) < 0))
 		return -1;
 
-	if (perf_soc_op(soc, op_write, stream->data, sinfo.size, NULL) < 0)
+	if (LOG_CALL(perf_soc_op(soc, op_write, stream->data, sinfo.size,
+				 NULL) < 0))
 		return -1;
 
 	return 0;
@@ -145,8 +139,8 @@ int recv_stream(int soc, stream_t *restrict stream)
 {
 	struct stream_info sinfo;
 
-	if (perf_soc_op(soc, op_read, &sinfo, sizeof(struct stream_info),
-			NULL) < 0)
+	if (LOG_CALL(perf_soc_op(soc, op_read, &sinfo,
+				 sizeof(struct stream_info), NULL) < 0))
 		return -1;
 
 	*stream = (stream_t){
@@ -161,14 +155,16 @@ int recv_stream(int soc, stream_t *restrict stream)
 		.data = malloc(sinfo.size),
 	};
 
-	if (stream->metadata.data == NULL || stream->data == NULL)
-		ERR_GOTO("malloc");
-
-	if (perf_soc_op(soc, op_read, stream->metadata.data,
-			sinfo.len * sizeof(size_t), NULL) < 0)
+	if (LOG_PERROR(stream->metadata.data == NULL || stream->data == NULL,
+		       "malloc"))
 		goto error;
 
-	if (perf_soc_op(soc, op_read, stream->data, sinfo.size, NULL) < 0)
+	if (LOG_CALL(perf_soc_op(soc, op_read, stream->metadata.data,
+				 sinfo.len * sizeof(size_t), NULL) < 0))
+		goto error;
+
+	if (LOG_CALL(perf_soc_op(soc, op_read, stream->data, sinfo.size, NULL) <
+		     0))
 		goto error;
 
 	return 0;

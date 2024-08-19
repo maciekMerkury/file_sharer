@@ -20,6 +20,7 @@
 
 #include "core.h"
 #include "entry.h"
+#include "log.h"
 #include "message.h"
 #include "progress_bar.h"
 
@@ -49,13 +50,12 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
 			a->port = atoi(arg);
 			break;
 		case 1:
-			// this should probably handle errors
-			realpath(arg, a->downloads_dir);
-			if (!check_directory_exists(a->downloads_dir)) {
-				fprintf(stderr, "Directory %s does not exist\n",
-					a->downloads_dir);
-				exit(EXIT_FAILURE);
-			}
+			LOG_THROW(LOG_PERROR(!realpath(arg, a->downloads_dir),
+					     "realpath"));
+			LOG_THROW(LOG_ERRORF(
+				!check_directory_exists(a->downloads_dir), -1,
+				"Directory `%s` does not exist\n",
+				a->downloads_dir));
 			break;
 		default:
 			argp_usage(state);
@@ -83,11 +83,7 @@ void read_args(int argc, char *argv[], uint16_t *port,
 	};
 	args a = { .parsed = 0, .downloads_dir = downloads_directory };
 
-	if (argp_parse(&argp, argc, argv, 0, NULL, &a) < 0) {
-		fprintf(stderr, "parsing error :(\n");
-		exit(EXIT_FAILURE);
-	}
-
+	LOG_THROW(LOG_CALL(argp_parse(&argp, argc, argv, 0, NULL, &a) < 0));
 	*port = a.port;
 }
 
@@ -104,9 +100,8 @@ typedef struct client {
 
 int setup(uint16_t port)
 {
-	int sock = socket(PF_INET, SOCK_STREAM, 0);
-	if (sock < 0)
-		ERR_EXIT("socket");
+	int sock;
+	LOG_THROW((sock = socket(PF_INET, SOCK_STREAM, 0)) < 0);
 
 	struct sockaddr_in addr;
 	memset(&addr, 0, sizeof(struct sockaddr_in));
@@ -115,12 +110,13 @@ int setup(uint16_t port)
 	addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
 	int t = 1;
-	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &t, sizeof(t)))
-		ERR_EXIT("setsockopt");
-	if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0)
-		ERR_EXIT("bind");
-	if (listen(sock, BACKLOG_SIZE) < 0)
-		ERR_EXIT("listen");
+	LOG_THROW(LOG_PERROR(setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &t,
+					sizeof(t)),
+			     "setsockopt"));
+	LOG_THROW(LOG_PERROR(bind(sock, (struct sockaddr *)&addr,
+				  sizeof(addr)) < 0,
+			     "bind"));
+	LOG_THROW(LOG_PERROR(listen(sock, BACKLOG_SIZE) < 0, "listen"));
 
 	return sock;
 }
@@ -132,33 +128,28 @@ int recv_info(client_t *client)
 		.events = POLLIN,
 	};
 
-	if (poll(&p, 1, TIMEOUT) == 0) {
-		fprintf(stderr,
-			"Client from host %s did not send data within timeout\n",
-			client->addr_str);
+	if (LOG_ERRORF(poll(&p, 1, TIMEOUT) == 0, 1,
+		       "Client from host %s did not send data within timeout\n",
+		       client->addr_str))
 		return 1;
-	}
 
 	header_t header;
 	peer_info_t *info = NULL;
 
-	if (perf_soc_op(client->socket, op_read, &header, sizeof(header_t),
-			NULL) < 0)
+	if (LOG_CALL(perf_soc_op(client->socket, op_read, &header,
+				 sizeof(header_t), NULL) < 0))
 		return -1;
 
-	if (header.type != mt_pinfo) {
-		fprintf(stderr,
-			"Client from host %s didn't send a peer info message\n",
-			client->addr_str);
+	if (LOG_ERRORF(header.type != mt_pinfo, 2,
+		       "Client from host %s didn't send a peer info message\n",
+		       client->addr_str))
 		return 1;
-	}
 
-	info = malloc(header.data_size);
-	if (info == NULL)
-		ERR_GOTO("malloc");
+	LOG_THROW(LOG_PERROR((info = malloc(header.data_size)) == NULL,
+			     "malloc"));
 
-	if (perf_soc_op(client->socket, op_read, info, header.data_size, NULL) <
-	    0)
+	if (LOG_CALL(perf_soc_op(client->socket, op_read, info,
+				 header.data_size, NULL) < 0))
 		goto error;
 
 	client->info = info;
@@ -167,8 +158,8 @@ int recv_info(client_t *client)
 		.type = mt_ack,
 		.data_size = 0,
 	};
-	if (perf_soc_op(client->socket, op_write, &ack, sizeof(header_t),
-			NULL) < 0)
+	if (LOG_CALL(perf_soc_op(client->socket, op_write, &ack,
+				 sizeof(header_t), NULL) < 0))
 		goto error;
 
 	printf("Client %s from address %s has connected\n",
@@ -181,37 +172,42 @@ error:
 	return -1;
 }
 
-void accept_client(int soc, client_t *client)
+int accept_client(int soc, client_t *client)
 {
 	printf("Waiting for a new client\n");
 
 	struct sockaddr_in addr;
 	socklen_t len = sizeof(addr);
-	if ((client->socket = accept(soc, (struct sockaddr *)&addr, &len)) < 0)
-		ERR_EXIT("accept");
+	client->socket = accept(soc, (struct sockaddr *)&addr, &len);
+	if (LOG_PERROR((client->socket < 0), "accept"))
+		return -1;
 
-	if (!inet_ntop(AF_INET, &(addr.sin_addr), client->addr_str,
-		       INET_ADDRSTRLEN))
-		PERROR("inet_ntop");
+	if (LOG_PERROR(inet_ntop(AF_INET, &(addr.sin_addr), client->addr_str,
+				 INET_ADDRSTRLEN) == NULL,
+		       "inet_ntop"))
+		return -1;
+
+	return 0;
 }
 
 int confirm_transfer(client_t *client, char path[PATH_MAX])
 {
 	header_t header;
-	if (perf_soc_op(client->socket, op_read, &header, sizeof(header_t),
-			NULL) < 0)
+	if (LOG_CALL(perf_soc_op(client->socket, op_read, &header,
+				 sizeof(header_t), NULL) < 0))
 		return -1;
 
-	if (header.type != mt_req) {
-		fprintf(stderr,
-			"Client %s from host %s didn't send a request messsage\n",
-			client->info->username, client->addr_str);
+	if (LOG_ERRORF(header.type != mt_req, 1,
+		       "Client %s from host %s didn't send a request message\n",
+		       client->info->username, client->addr_str))
 		return 1;
-	}
 
 	request_data_t *request = malloc(header.data_size);
-	if (perf_soc_op(client->socket, op_read, request, header.data_size,
-			NULL) < 0)
+	if (LOG_PERROR(request == NULL, "malloc"))
+		goto error;
+
+	if (LOG_CALL(perf_soc_op(client->socket, op_read, request,
+				 header.data_size, NULL) < 0))
 		goto error;
 
 	size_info size = bytes_to_size(request->total_file_size);
@@ -222,8 +218,8 @@ int confirm_transfer(client_t *client, char path[PATH_MAX])
 
 	char *line = NULL;
 	size_t len;
-	if (getline(&line, &len, stdin) < 0)
-		ERR_GOTO("getline");
+	if (LOG_PERROR((getline(&line, &len, stdin) < 0), "getline"))
+		goto error;
 
 	char c = line[0];
 	const bool accept = c == 'y' || c == 'Y' || c == '\n';
@@ -234,8 +230,8 @@ int confirm_transfer(client_t *client, char path[PATH_MAX])
 		.data_size = 0,
 	};
 
-	if (perf_soc_op(client->socket, op_write, &res, sizeof(header_t),
-			NULL) < 0)
+	if (LOG_CALL(perf_soc_op(client->socket, op_write, &res,
+				 sizeof(header_t), NULL) < 0))
 		return -1;
 
 	free(request);
@@ -250,12 +246,12 @@ error:
 
 int recv_metadata(client_t *client)
 {
-	if (recv_stream(client->socket, &client->entries) < 0)
+	if (LOG_CALL(recv_stream(client->socket, &client->entries) < 0))
 		return -1;
 
 	header_t ack = { .type = mt_ack, .data_size = 0 };
-	if (perf_soc_op(client->socket, op_write, &ack, sizeof(header_t),
-			NULL) < 0)
+	if (LOG_CALL(perf_soc_op(client->socket, op_write, &ack,
+				 sizeof(header_t), NULL) < 0))
 		return -1;
 
 	return 0;
@@ -270,32 +266,56 @@ void recv_data(client_t *client, char path[PATH_MAX])
 	entry_handles_t entry_handles;
 	chdir(path);
 
+	bool error = false;
+
 	const char *title_format = "Receiving %s";
 	char title[PATH_MAX + 10];
 	struct timespec ts = { 0, 1e8 };
 	progress_bar_t bar;
 	while ((entry = stream_iter_next(&it))) {
 		if (entry->type == et_dir) {
-			if (mkdir(entry->rel_path, entry->permissions) < 0)
-				PERROR("mkdir");
+			int ret = mkdir(entry->rel_path, entry->permissions);
+			if (LOG_IGNORE(LOG_PERROR(ret < 0, "mkdir")))
+				error = true;
 			continue;
 		}
 
-		if (get_entry_handles(entry, &entry_handles, op_write) < 0)
-			continue;
-		if (ftruncate(entry_handles.fd, entry_handles.size) < 0)
-			ERR_GOTO("ftruncate");
+		bool dealloc = false;
+		if (LOG_IGNORE(LOG_CALL(get_entry_handles(entry, &entry_handles,
+							  op_write) < 0))) {
+			// we have to pretend to receive the data just becaue
+			// we have no way of telling the client to not send it
+			entry_handles.size = entry->size;
+			entry_handles.map = malloc(entry->size);
+			dealloc = true;
+
+			LOG_THROW(LOG_PERROR(entry_handles.map == NULL,
+					     "malloc"));
+
+			error = true;
+		} else {
+			int r = ftruncate(entry_handles.fd, entry_handles.size);
+			if (LOG_IGNORE(LOG_PERROR(r < 0, "ftruncate")))
+				goto error;
+		}
 
 		snprintf(title, sizeof(title), title_format, entry->rel_path);
 		prog_bar_init(&bar, title, entry_handles.size, ts);
 
-		if (perf_soc_op(client->socket, op_read, entry_handles.map,
-				entry_handles.size, &bar) < 0)
+		if (LOG_IGNORE((perf_soc_op(client->socket, op_read,
+					    entry_handles.map,
+					    entry_handles.size, &bar) < 0)))
 			goto error;
 
 error:
-		close_entry_handles(&entry_handles);
+		if (dealloc)
+			free(entry_handles.map);
+		else
+			close_entry_handles(&entry_handles);
 	}
+
+	if (error)
+		fprintf(stderr, "Errors occurred, check the log for more info\n");
 }
 
 void cleanup_client(client_t *client)
@@ -311,36 +331,46 @@ void cleanup_client(client_t *client)
 
 void *handle_client(void *arg)
 {
+	logger_add_thread();
 	client_t *client = arg;
 
-	if (recv_info(client))
-		goto cleanup;
+	if (LOG_CALL(recv_info(client)))
+		goto error;
 
 	char path[PATH_MAX];
 
-	if (confirm_transfer(client, path))
-		goto cleanup;
+	if (LOG_CALL(confirm_transfer(client, path)))
+		goto error;
 
-	if (recv_metadata(client) < 0)
-		goto cleanup;
+	if (LOG_CALL(recv_metadata(client) < 0))
+		goto error;
 
-	recv_data(client, client->download_dir);
+	LOG_CALLV(recv_data(client, client->download_dir));
 
-cleanup:
+	logger_remove_thread(1);
+
+	return NULL;
+
+error:
 	cleanup_client(client);
 	free(client);
+	log_throw(__LINE__, __FILE__, __func__);
 
 	return NULL;
 }
 
 int main(int argc, char *argv[])
 {
+	logger_init(NULL);
+	logger_add_thread();
+
 	char downloads_directory[PATH_MAX];
 	uint16_t port;
 
 	read_args(argc, argv, &port, downloads_directory);
 
-	int soc = setup(port);
+	int soc;
+	LOG_CALL(soc = setup(port));
 
 	pthread_attr_t attr;
 	pthread_attr_init(&attr);
@@ -348,16 +378,23 @@ int main(int argc, char *argv[])
 
 	while (true) {
 		client_t *client = malloc(sizeof(client_t));
-		*client = (client_t){ .download_dir = downloads_directory };
+		if (LOG_IGNORE(LOG_PERROR(client == NULL, "malloc")))
+			continue;
 
-		accept_client(soc, client);
+		*client = (client_t){ .download_dir = downloads_directory };
+		if (LOG_IGNORE(LOG_CALL(accept_client(soc, client) < 0)))
+			continue;
 
 		pthread_t tid;
-		if (pthread_create(&tid, &attr, handle_client, client))
-			PERROR("ptrhead_create");
+		LOG_IGNORE(LOG_PERROR(pthread_create(&tid, &attr, handle_client,
+						     client),
+				      "pthread_create"));
 	}
 
 	close(soc);
+
+	logger_remove_thread(1);
+	logger_deinit();
 
 	return EXIT_SUCCESS;
 }

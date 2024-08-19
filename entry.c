@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #include <assert.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <ftw.h>
 #include <libgen.h>
@@ -13,6 +14,7 @@
 
 #include "core.h"
 #include "entry.h"
+#include "log.h"
 #include "stream.h"
 
 #define MAX_FD 20
@@ -37,8 +39,8 @@ static int fn(const char *path, const struct stat *s, int flags, struct FTW *f)
 		return 0;
 	}
 
-	if (!realpath(path, buf))
-		ERR_GOTO("realpath");
+	if (LOG_IGNORE(LOG_PERROR(realpath(path, buf) == NULL, "realpath")))
+		return 0;
 
 	if (strstr(buf, entries->parent_path) != buf) {
 		fprintf(stderr,
@@ -57,9 +59,11 @@ static int fn(const char *path, const struct stat *s, int flags, struct FTW *f)
 				 relative_path_size % alignof(entry_t);
 	const size_t struct_size = sizeof(entry_t) + path_size;
 
-	entry_t *new_entry = stream_add_item(&entries->entries, struct_size);
-	if (new_entry == NULL)
-		goto error;
+	entry_t *new_entry;
+	if (LOG_IGNORE(LOG_CALL((new_entry = stream_add_item(&entries->entries,
+							     struct_size)) ==
+				NULL)))
+		return 0;
 
 	*new_entry = (entry_t){
 		.type = flags == FTW_F ? et_reg : et_dir,
@@ -71,7 +75,6 @@ static int fn(const char *path, const struct stat *s, int flags, struct FTW *f)
 
 	entries->total_file_size += new_entry->size;
 
-error:
 	return 0;
 }
 
@@ -81,15 +84,16 @@ int create_entries(const char *path, entries_t *e)
 	entries = e;
 	create_stream(&entries->entries);
 
-	if (!(entries->parent_path = realpath(path, NULL)))
-		ERR_GOTO("realpath");
+	if (LOG_PERROR((entries->parent_path = realpath(path, NULL)) == NULL,
+		       "realpath"))
+		goto error;
 
 	// dirname modifies path argument
 	entries->parent_path = dirname(entries->parent_path);
 	entries->parent_path_len = strlen(entries->parent_path);
 
-	if (nftw(path, &fn, MAX_FD, 0) < 0)
-		ERR_GOTO("nftw");
+	if (LOG_PERROR(nftw(path, &fn, MAX_FD, 0) < 0, "nftw"))
+		goto error;
 
 	return 0;
 
@@ -118,18 +122,24 @@ int get_entry_handles(entry_t *entry, entry_handles_t *handles,
 	*handles = (entry_handles_t){
 		.size = entry->size,
 	};
+	handles->fd = open(entry->rel_path, open_flags, entry->permissions);
 
-	if ((handles->fd =
-		     open(entry->rel_path, open_flags, entry->permissions)) < 0)
-		ERR_GOTO("open");
+	if (handles->fd < 0) {
+		LOG_ERRORF(errno == EEXIST, EEXIST, "File `%s` exists",
+			   entry->rel_path);
+
+		LOG_PERROR(errno != EEXIST, "open");
+
+		goto error;
+	}
 
 	if (handles->size == 0)
 		return 0;
 
-	if ((handles->map = mmap(NULL, handles->size, map_flags,
-				 MAP_FILE | MAP_SHARED, handles->fd, 0)) ==
-	    MAP_FAILED)
-		ERR_GOTO("mmap");
+	handles->map = mmap(NULL, handles->size, map_flags,
+			    MAP_FILE | MAP_SHARED, handles->fd, 0);
+	if (LOG_PERROR(handles->map == MAP_FAILED, "mmap"))
+		goto error;
 
 	return 0;
 

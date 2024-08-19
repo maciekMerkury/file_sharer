@@ -6,6 +6,7 @@
 
 #include "core.h"
 #include "entry.h"
+#include "log.h"
 #include "message.h"
 
 peer_info_t *create_pinfo_message(header_t *header)
@@ -18,7 +19,7 @@ peer_info_t *create_pinfo_message(header_t *header)
 	const size_t data_size = sizeof(peer_info_t) + username_size;
 
 	peer_info_t *data = malloc(data_size);
-	if (data == NULL)
+	if (LOG_PERROR(data == NULL, "malloc"))
 		return NULL;
 
 	*header = (header_t){
@@ -42,7 +43,7 @@ request_data_t *create_request_message(const entries_t *restrict entries,
 	const size_t req_size = sizeof(request_data_t) + filename_size;
 
 	request_data_t *data = malloc(req_size);
-	if (data == NULL)
+	if (LOG_PERROR(data == NULL, "malloc"))
 		return NULL;
 
 	*header = (header_t){
@@ -62,10 +63,10 @@ request_data_t *create_request_message(const entries_t *restrict entries,
 
 int send_msg(int soc, header_t *h, void *data)
 {
-	if (perf_soc_op(soc, op_write, h, sizeof(header_t), NULL) < 0)
+	if (LOG_CALL(perf_soc_op(soc, op_write, h, sizeof(header_t), NULL) < 0))
 		return -1;
 
-	if (perf_soc_op(soc, op_write, data, h->data_size, NULL) < 0)
+	if (LOG_CALL(perf_soc_op(soc, op_write, data, h->data_size, NULL) < 0))
 		return -1;
 
 	return 0;
@@ -73,14 +74,14 @@ int send_msg(int soc, header_t *h, void *data)
 
 int receive_msg(int soc, header_t *restrict h, void *restrict *data)
 {
-	if (perf_soc_op(soc, op_read, h, sizeof(header_t), NULL) < 0)
+	if (LOG_CALL(perf_soc_op(soc, op_read, h, sizeof(header_t), NULL) < 0))
 		return -1;
 
 	*data = realloc(*data, h->data_size);
-	if (!*data)
-		ERR_GOTO("realloc");
+	if (LOG_PERROR(*data == NULL, "realloc"))
+		goto error;
 
-	if (perf_soc_op(soc, op_read, *data, h->data_size, NULL) < 0)
+	if (LOG_CALL(perf_soc_op(soc, op_read, *data, h->data_size, NULL) < 0))
 		goto error;
 
 	return 0;
