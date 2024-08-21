@@ -188,7 +188,8 @@ refused:
 
 static int send_all_files(entries_t *fs, int soc)
 {
-	if (LOG_PERROR(chdir(fs->parent_path) < 0, "chdir"))
+	int fd;
+	if (LOG_PERROR((fd = open(fs->parent_path, O_DIRECTORY)) < 0, "open"))
 		return -1;
 
 	stream_iter_t it;
@@ -202,7 +203,7 @@ static int send_all_files(entries_t *fs, int soc)
 		if (ne->type == et_dir)
 			continue;
 
-		if (LOG_CALL(get_entry_handles(ne, &fdata, op_read) < 0))
+		if (LOG_CALL(get_entry_handles(fd, ne, &fdata, op_read) < 0))
 			return -1;
 
 		prog_bar_init(&p, ne->rel_path, ne->size,
@@ -285,7 +286,7 @@ int main(int argc, char **argv)
 	printf("addr: %s, path: %s, port: %u\n", inet_ntoa(a.addr), a.path,
 	       a.port);
 
-	LOG_THROW(client_main(a.port, a.addr, a.path) < 0);
+	LOG_THROW(LOG_CALL(client_main(a.port, a.addr, a.path) < 0));
 
 	logger_remove_thread(1);
 	logger_deinit();

@@ -109,8 +109,8 @@ void destroy_entries(entries_t *entries)
 	destroy_stream(&entries->entries);
 }
 
-int get_entry_handles(entry_t *entry, entry_handles_t *handles,
-		      operation_type operation)
+int get_entry_handles(int parent_dir_fd, entry_t *entry,
+		      entry_handles_t *handles, operation_type operation)
 {
 	assert(entry->type == et_reg);
 
@@ -122,13 +122,14 @@ int get_entry_handles(entry_t *entry, entry_handles_t *handles,
 	*handles = (entry_handles_t){
 		.size = entry->size,
 	};
-	handles->fd = open(entry->rel_path, open_flags, entry->permissions);
+	handles->fd = openat(parent_dir_fd, entry->rel_path, open_flags,
+			     entry->permissions);
 
 	if (handles->fd < 0) {
 		LOG_ERRORF(errno == EEXIST, EEXIST, "File `%s` exists",
 			   entry->rel_path);
 
-		LOG_PERROR(errno != EEXIST, "open");
+		LOG_PERROR(errno != EEXIST, "openat");
 
 		goto error;
 	}

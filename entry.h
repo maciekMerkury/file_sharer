@@ -39,8 +39,7 @@ typedef struct entry_handles {
 	size_t size;
 } entry_handles_t;
 
-/* chdir to entries_t.parent_path before running */
 /* will set entry_handles.map to NULL if entry.size is 0 */
-int get_entry_handles(entry_t *entry, entry_handles_t *handles,
-		      operation_type operation);
+int get_entry_handles(int parent_path_fd, entry_t *entry,
+		      entry_handles_t *handles, operation_type operation);
 void close_entry_handles(entry_handles_t *handles);

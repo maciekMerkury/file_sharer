@@ -264,7 +264,10 @@ void recv_data(client_t *client, char path[PATH_MAX])
 
 	entry_t *entry;
 	entry_handles_t entry_handles;
-	chdir(path);
+
+	int root_dir_fd;
+	if (LOG_PERROR((root_dir_fd = open(path, O_DIRECTORY)), "open") < 0)
+		return;
 
 	bool error = false;
 
@@ -274,14 +277,16 @@ void recv_data(client_t *client, char path[PATH_MAX])
 	progress_bar_t bar;
 	while ((entry = stream_iter_next(&it))) {
 		if (entry->type == et_dir) {
-			int ret = mkdir(entry->rel_path, entry->permissions);
-			if (LOG_IGNORE(LOG_PERROR(ret < 0, "mkdir")))
+			int ret = mkdirat(root_dir_fd, entry->rel_path,
+					  entry->permissions);
+			if (LOG_IGNORE(LOG_PERROR(ret < 0, "mkdirat")))
 				error = true;
 			continue;
 		}
 
 		bool dealloc = false;
-		if (LOG_IGNORE(LOG_CALL(get_entry_handles(entry, &entry_handles,
+		if (LOG_IGNORE(LOG_CALL(get_entry_handles(root_dir_fd, entry,
+							  &entry_handles,
 							  op_write) < 0))) {
 			// we have to pretend to receive the data just becaue
 			// we have no way of telling the client to not send it
@@ -314,8 +319,11 @@ error:
 			close_entry_handles(&entry_handles);
 	}
 
+	close(root_dir_fd);
+
 	if (error)
-		fprintf(stderr, "Errors occurred, check the log for more info\n");
+		fprintf(stderr,
+			"Errors occurred, check the log for more info\n");
 }
 
 void cleanup_client(client_t *client)
@@ -334,12 +342,13 @@ void *handle_client(void *arg)
 	logger_add_thread();
 	client_t *client = arg;
 
-	if (LOG_CALL(recv_info(client)))
+	int ret;
+	if (LOG_CALL((ret = recv_info(client))))
 		goto error;
 
 	char path[PATH_MAX];
 
-	if (LOG_CALL(confirm_transfer(client, path)))
+	if (LOG_CALL((ret = confirm_transfer(client, path))))
 		goto error;
 
 	if (LOG_CALL(recv_metadata(client) < 0))
@@ -354,7 +363,9 @@ void *handle_client(void *arg)
 error:
 	cleanup_client(client);
 	free(client);
-	log_throw(__LINE__, __FILE__, __func__);
+
+	if (ret < 0)
+		log_throw(__LINE__, __FILE__, __func__);
 
 	return NULL;
 }
