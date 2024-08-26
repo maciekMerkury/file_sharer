@@ -1,4 +1,3 @@
-#include "log.h"
 #include <argp.h>
 #include <arpa/inet.h>
 #include <assert.h>
@@ -14,6 +13,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "log.h"
 #include "core.h"
 #include "entry.h"
 #include "message.h"
