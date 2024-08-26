@@ -237,7 +237,7 @@ static int send_all_files(entries_t *fs, int soc)
 			return -1;
 		}
 
-		prog_bar_init(&p, ne->rel_path, ne->size,
+		prog_bar_init(&p, get_entry_rel_path(ne->data), ne->size,
 			      (struct timespec){ .tv_nsec = 500e3 });
 
 		const int ret =
@@ -280,7 +280,8 @@ static int client_main(in_port_t port, struct in_addr addr, char *file_path)
 
 	size_info size = bytes_to_size(fs.total_file_size);
 	printf("sending %s, size %.2lf%s\n",
-	       ((entry_t *)fs.entries.data)->rel_path, size.size, unit(size));
+	       get_entry_rel_path((((entry_t *)fs.entries.data)->data)),
+	       size.size, unit(size));
 
 	if ((ret = send_all_files(&fs, server)) < 0) {
 		fprintf(stderr, "could not send all files\n");

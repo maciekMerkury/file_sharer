@@ -219,11 +219,18 @@ int confirm_transfer(client_t *client, char path[PATH_MAX])
 			NULL) < 0)
 		goto error;
 
+	char body[256];
+	size_info size = bytes_to_size(request->total_file_size);
+	snprintf(body, 256,
+		 "Client %s (%s) wants to send you %s `%s` of size %.2lf %s",
+		 client->info->username, client->addr_str,
+		 get_entry_type_name(request->entry_type),
+		 get_entry_rel_path(request->entry_data), size.size,
+		 unit(size));
+
 	int ret;
-	if ((ret = request_notification(client->info->username,
-					client->addr_str, request->entry_type,
-					request->total_file_size,
-					request->filename)) < 0)
+	if ((ret = request_notification(
+		     body, get_entry_content_type(request->entry_data))) < 0)
 		goto error;
 
 	header_t res = {
@@ -258,7 +265,7 @@ int recv_metadata(client_t *client)
 	return 0;
 }
 
-int recv_data(client_t *client, char path[PATH_MAX])
+void recv_data(client_t *client, char path[PATH_MAX])
 {
 	int received_files = 0;
 
@@ -274,8 +281,9 @@ int recv_data(client_t *client, char path[PATH_MAX])
 	struct timespec ts = { 0, 1e8 };
 	progress_bar_t bar;
 	while ((entry = stream_iter_next(&it))) {
+		const char *path = get_entry_rel_path(entry->data);
 		if (entry->type == et_dir) {
-			if (mkdir(entry->rel_path, entry->permissions) < 0) {
+			if (mkdir(path, entry->permissions) < 0) {
 				transfer_error_notification(strerror(errno));
 				PERROR("mkdir");
 			}
@@ -291,7 +299,7 @@ int recv_data(client_t *client, char path[PATH_MAX])
 		if (ftruncate(entry_handles.fd, entry_handles.size) < 0)
 			ERR_GOTO("ftruncate");
 
-		snprintf(title, sizeof(title), title_format, entry->rel_path);
+		snprintf(title, sizeof(title), title_format, path);
 		prog_bar_init(&bar, title, entry_handles.size, ts);
 
 		if (perf_soc_op(client->socket, op_read, entry_handles.map,
@@ -299,11 +307,23 @@ int recv_data(client_t *client, char path[PATH_MAX])
 			goto error;
 
 		received_files++;
+
 error:
 		close_entry_handles(&entry_handles);
 	}
 
-	return received_files;
+	const entry_t *main_entry = ((entry_t *)client->entries.data);
+
+	char details[223];
+	snprintf(details, 223, "Downloaded %u files in total", received_files);
+
+	char body[256];
+	snprintf(body, 256, "Download of %s `%s` completed %s",
+		 get_entry_type_name(main_entry->type),
+		 get_entry_rel_path(main_entry->data),
+		 received_files > 1 ? details : "");
+
+	transfer_complete_notification(body);
 }
 
 void cleanup_client(client_t *client)
@@ -327,11 +347,7 @@ void handle_client(client_t *client, char downloads_directory[PATH_MAX])
 	if (recv_metadata(client) < 0)
 		goto cleanup;
 
-	int received_files = recv_data(client, downloads_directory);
-
-	const entry_t *entry = ((entry_t *)client->entries.data);
-	transfer_complete_notification(entry->type, entry->rel_path,
-				       received_files);
+	recv_data(client, downloads_directory);
 
 cleanup:
 	cleanup_client(client);

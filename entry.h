@@ -6,19 +6,27 @@
 
 typedef enum entry_type { et_reg, et_dir } entry_type;
 
+typedef struct entry_data {
+	size_t path_size;
+	size_t content_type_size;
+
+	/* buf layout: rel_path nil content_type nil */
+	char buf[];
+} entry_data_t;
+
 typedef struct entry {
 	entry_type type;
 	mode_t permissions;
 	off_t size;
 
-	/* includes the null byte */
-	/* contains alignment padding */
-	/* relative to entries_t.parent_path */
-	size_t path_size;
-	char rel_path[];
+	/* padding + entry_data_t */
+	char data[];
 } entry_t;
 
 const char *get_entry_type_name(entry_type entry_type);
+entry_data_t *align_entry_data(const char data[]);
+const char *get_entry_rel_path(const char entry_data[]);
+const char *get_entry_content_type(const char entry_data[]);
 
 typedef struct entries {
 	off_t total_file_size;

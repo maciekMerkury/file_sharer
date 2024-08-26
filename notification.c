@@ -6,7 +6,6 @@
 #include <unistd.h>
 
 #include "core.h"
-#include "entry.h"
 #include "notification.h"
 
 #define GERROR(error)                                                      \
@@ -16,9 +15,6 @@
 		 __FILE__, __LINE__, __func__, error->domain, error->code, \
 		 error->message),                                          \
 	 g_error_free(error))
-
-const char directory_icon[] = "inode-directory";
-const char file_icon[] = "text-x-preview";
 
 static GMainLoop *loop;
 
@@ -79,21 +75,11 @@ void notifications_deinit(void)
 	notify_uninit();
 }
 
-int request_notification(const char username[],
-			 const char addr_str[INET_ADDRSTRLEN],
-			 entry_type entry_type, off_t file_size,
-			 const char filename[])
+int request_notification(const char body[], const char content_type[])
 {
-	const char *icon = entry_type == et_dir ? directory_icon : file_icon;
-
 	int res = -1;
 
-	char body[256];
-	size_info size = bytes_to_size(file_size);
-	snprintf(body, 256,
-		 "Client %s (%s) wants to send you %s `%s` of size %.2lf %s",
-		 username, addr_str, get_entry_type_name(entry_type), filename,
-		 size.size, unit(size));
+	const char *icon = g_content_type_get_generic_icon_name(content_type);
 
 	NotifyNotification *n =
 		notify_notification_new("File Transfer Request", body, icon);
@@ -122,19 +108,10 @@ int request_notification(const char username[],
 	return res;
 }
 
-int transfer_complete_notification(entry_type entry_type, const char filename[],
-				   unsigned file_count)
+int transfer_complete_notification(const char body[])
 {
-	char details[223];
-	snprintf(details, 223, "Downloaded %u files in total", file_count);
-
-	char body[256];
-	snprintf(body, 256, "Download of %s `%s` completed %s",
-		 get_entry_type_name(entry_type), filename,
-		 file_count > 1 ? details : "");
-
 	NotifyNotification *n = notify_notification_new(
-		"File Transfer Complete", body, "folder-download");
+		"File Transfer Complete", body, "network-receive");
 	notify_notification_set_category(n, "transfer.complete");
 
 	GError *err = NULL;
@@ -148,8 +125,8 @@ int transfer_complete_notification(entry_type entry_type, const char filename[],
 
 int transfer_error_notification(const char body[])
 {
-	NotifyNotification *n = notify_notification_new(
-		"File Transfer Error", body, "folder-download");
+	NotifyNotification *n = notify_notification_new("File Transfer Error",
+							body, "network-error");
 	notify_notification_set_category(n, "transfer.error");
 
 	GError *err = NULL;
