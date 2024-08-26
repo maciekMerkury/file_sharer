@@ -29,9 +29,8 @@ typedef struct request_data {
 	off_t total_file_size;
 	entry_type entry_type;
 
-	/* includes the null byte */
-	size_t filename_size;
-	char filename[];
+	/* padding + entry_data_t */
+	char entry_data[];
 } request_data_t;
 
 peer_info_t *create_pinfo_message(header_t *header);

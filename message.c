@@ -36,11 +36,14 @@ peer_info_t *create_pinfo_message(header_t *header)
 request_data_t *create_request_message(const entries_t *restrict entries,
 				       header_t *restrict header)
 {
-	const char *root_dir_basename =
-		((entry_t *)entries->entries.data)[0].rel_path;
-	const size_t filename_size = strlen(root_dir_basename) + 1;
+	const entry_t *main_entry = (entry_t *)entries->entries.data;
+	const entry_data_t *main_entry_data =
+		align_entry_data(main_entry->data);
+	const size_t main_entry_data_size = sizeof(entry_data_t) +
+					    main_entry_data->path_size +
+					    main_entry_data->content_type_size;
 
-	const size_t req_size = sizeof(request_data_t) + filename_size;
+	const size_t req_size = sizeof(request_data_t) + main_entry_data_size;
 
 	request_data_t *data = malloc(req_size);
 	if (LOG_PERROR(data == NULL, "malloc"))
@@ -53,10 +56,17 @@ request_data_t *create_request_message(const entries_t *restrict entries,
 
 	*data = (request_data_t){
 		.total_file_size = entries->total_file_size,
-		.entry_type = ((entry_t *)entries->entries.data)[0].type,
-		.filename_size = filename_size,
+		.entry_type = main_entry->type,
 	};
-	memcpy(data->filename, root_dir_basename, filename_size);
+
+	entry_data_t *entry_data = align_entry_data(data->entry_data);
+	*entry_data =
+		(entry_data_t){ .path_size = main_entry_data->path_size,
+				.content_type_size =
+					main_entry_data->content_type_size };
+
+	memcpy(entry_data->buf, main_entry_data->buf,
+	       main_entry_data->path_size + main_entry_data->content_type_size);
 
 	return data;
 }

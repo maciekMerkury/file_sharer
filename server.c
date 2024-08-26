@@ -22,6 +22,7 @@
 #include "entry.h"
 #include "log.h"
 #include "message.h"
+#include "notification.h"
 #include "progress_bar.h"
 
 typedef struct {
@@ -101,7 +102,8 @@ typedef struct client {
 int setup(uint16_t port)
 {
 	int sock;
-	LOG_THROW((sock = socket(PF_INET, SOCK_STREAM, 0)) < 0);
+	LOG_THROW(LOG_PERROR((sock = socket(PF_INET, SOCK_STREAM, 0)) < 0,
+			     "socket"));
 
 	struct sockaddr_in addr;
 	memset(&addr, 0, sizeof(struct sockaddr_in));
@@ -210,23 +212,24 @@ int confirm_transfer(client_t *client, char path[PATH_MAX])
 				 header.data_size, NULL) < 0))
 		goto error;
 
+	char body[256];
 	size_info size = bytes_to_size(request->total_file_size);
-	printf("Do you want to receive %s `%.255s` of size %.2lf %s"
-	       " from user %s at host %s [Y/n] ",
-	       get_entry_type_name(request->entry_type), request->filename,
-	       size.size, unit(size), client->info->username, client->addr_str);
+	snprintf(body, 256,
+		 "Client %s (%s) wants to send you %s `%s` of size %.2lf %s",
+		 client->info->username, client->addr_str,
+		 get_entry_type_name(request->entry_type),
+		 get_entry_rel_path(request->entry_data), size.size,
+		 unit(size));
 
-	char *line = NULL;
-	size_t len;
-	if (LOG_PERROR((getline(&line, &len, stdin) < 0), "getline"))
+	int ret;
+	LOG_CALL(ret = request_notification(
+			 body, get_entry_content_type(request->entry_data)));
+
+	if (ret < 0)
 		goto error;
 
-	char c = line[0];
-	const bool accept = c == 'y' || c == 'Y' || c == '\n';
-	free(line);
-
 	header_t res = {
-		.type = accept ? mt_ack : mt_nack,
+		.type = ret == 0 ? mt_ack : mt_nack,
 		.data_size = 0,
 	};
 
@@ -236,7 +239,7 @@ int confirm_transfer(client_t *client, char path[PATH_MAX])
 
 	free(request);
 
-	return accept ? 0 : 1;
+	return ret;
 
 error:
 	free(request);
@@ -259,6 +262,8 @@ int recv_metadata(client_t *client)
 
 void recv_data(client_t *client, char path[PATH_MAX])
 {
+	int received_files = 0;
+
 	stream_iter_t it;
 	stream_iter_init(&it, &client->entries);
 
@@ -276,54 +281,80 @@ void recv_data(client_t *client, char path[PATH_MAX])
 	struct timespec ts = { 0, 1e8 };
 	progress_bar_t bar;
 	while ((entry = stream_iter_next(&it))) {
+		const char *path = get_entry_rel_path(entry->data);
 		if (entry->type == et_dir) {
-			int ret = mkdirat(root_dir_fd, entry->rel_path,
-					  entry->permissions);
+			int ret =
+				mkdirat(root_dir_fd, path, entry->permissions);
 			if (LOG_IGNORE(LOG_PERROR(ret < 0, "mkdirat")))
 				error = true;
 			continue;
 		}
 
-		bool dealloc = false;
-		if (LOG_IGNORE(LOG_CALL(get_entry_handles(root_dir_fd, entry,
-							  &entry_handles,
-							  op_write) < 0))) {
+		bool pretend = false;
+		if (LOG_CALL(get_entry_handles(root_dir_fd, entry,
+					       &entry_handles, op_write) < 0)) {
+pretend:
 			// we have to pretend to receive the data just becaue
 			// we have no way of telling the client to not send it
 			entry_handles.size = entry->size;
 			entry_handles.map = malloc(entry->size);
-			dealloc = true;
+			pretend = true;
 
 			LOG_THROW(LOG_PERROR(entry_handles.map == NULL,
 					     "malloc"));
 
 			error = true;
+			log_ignore(__LINE__, __FILE__, __func__);
 		} else {
-			int r = ftruncate(entry_handles.fd, entry_handles.size);
-			if (LOG_IGNORE(LOG_PERROR(r < 0, "ftruncate")))
-				goto error;
+			if (LOG_PERROR(ftruncate(entry_handles.fd,
+						 entry_handles.size) < 0,
+				       "ftruncate"))
+				goto pretend;
 		}
-
-		snprintf(title, sizeof(title), title_format, entry->rel_path);
+		snprintf(title, sizeof(title), title_format, path);
 		prog_bar_init(&bar, title, entry_handles.size, ts);
 
-		if (LOG_IGNORE((perf_soc_op(client->socket, op_read,
-					    entry_handles.map,
-					    entry_handles.size, &bar) < 0)))
+		if (LOG_IGNORE(perf_soc_op(client->socket, op_read,
+					   entry_handles.map,
+					   entry_handles.size, &bar) < 0))
 			goto error;
 
+		if (!pretend)
+			received_files++;
+
 error:
-		if (dealloc)
+		if (pretend)
 			free(entry_handles.map);
 		else
 			close_entry_handles(&entry_handles);
 	}
 
 	close(root_dir_fd);
+	const entry_t *main_entry = ((entry_t *)client->entries.data);
 
-	if (error)
-		fprintf(stderr,
-			"Errors occurred, check the log for more info\n");
+	char details[64];
+	switch (received_files) {
+	case 0:
+		details[0] = '\0';
+		break;
+	case 1:
+		sprintf(details, "Downloaded 1 file in total\n");
+		break;
+	default:
+		sprintf(details, "Downloaded %u files in total\n",
+			received_files);
+		break;
+	}
+
+	char body[256];
+	snprintf(body, 256, "Download of %s `%s` completed\n%s%s",
+		 get_entry_type_name(main_entry->type),
+		 get_entry_rel_path(main_entry->data), details,
+		 error ? "Error occurred during download,\n"
+			 "check the log for more info." :
+			 "");
+
+	LOG_CALL(transfer_complete_notification(body));
 }
 
 void cleanup_client(client_t *client)
@@ -375,6 +406,8 @@ int main(int argc, char *argv[])
 	logger_init(NULL);
 	logger_add_thread();
 
+	LOG_THROW(LOG_CALL(notifications_init("file-sharer server") < 0));
+
 	char downloads_directory[PATH_MAX];
 	uint16_t port;
 
@@ -403,6 +436,8 @@ int main(int argc, char *argv[])
 	}
 
 	close(soc);
+
+	notifications_deinit();
 
 	logger_remove_thread(1);
 	logger_deinit();

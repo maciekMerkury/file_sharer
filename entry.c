@@ -3,9 +3,11 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <ftw.h>
+#include <gio/gio.h>
 #include <libgen.h>
 #include <linux/limits.h>
 #include <stdalign.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,6 +24,26 @@
 const char *get_entry_type_name(entry_type entry_type)
 {
 	return entry_type == et_reg ? "file" : "directory";
+}
+
+entry_data_t *align_entry_data(const char data[])
+{
+	const size_t reminder = (uintptr_t)data % alignof(entry_data_t);
+	return (entry_data_t *)(reminder ? (uintptr_t)data +
+						   alignof(entry_data_t) -
+						   reminder :
+					   (uintptr_t)data);
+}
+
+const char *get_entry_rel_path(const char data[])
+{
+	return align_entry_data(data)->buf;
+}
+
+const char *get_entry_content_type(const char data[])
+{
+	const entry_data_t *entry_data = align_entry_data(data);
+	return entry_data->buf + entry_data->path_size;
 }
 
 static entries_t *entries;
@@ -50,30 +72,58 @@ static int fn(const char *path, const struct stat *s, int flags, struct FTW *f)
 		return 0;
 	}
 
+	GFile *file = g_file_new_for_path(path);
+	GFileInfo *file_info =
+		g_file_query_info(file, G_FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE,
+				  (GFileQueryInfoFlags)0, NULL, NULL);
+
+	const char *content_type = g_file_info_get_content_type(file_info);
+	const size_t content_type_size = strlen(content_type) + 1;
+
 	const char *relative_path = buf + entries->parent_path_len;
 	if (entries->parent_path[entries->parent_path_len] != '/')
 		++relative_path;
+	const size_t rel_path_size = strlen(relative_path) + 1;
 
-	const size_t relative_path_size = strlen(relative_path) + 1;
-	const size_t path_size = relative_path_size + alignof(entry_t) -
-				 relative_path_size % alignof(entry_t);
-	const size_t struct_size = sizeof(entry_t) + path_size;
+	const size_t data_size =
+		sizeof(entry_data_t) + rel_path_size + content_type_size;
+	const size_t data_reminder = data_size % alignof(entry_data_t);
+	const size_t data_alloc_size =
+		data_reminder ?
+			data_size + alignof(entry_data_t) - data_reminder :
+			data_size;
+
+	const size_t struct_size = sizeof(entry_t) + data_alloc_size;
+	const size_t reminder = struct_size % alignof(entry_t);
+	const size_t alloc_size =
+		reminder ? struct_size + alignof(entry_t) - reminder :
+			   struct_size;
 
 	entry_t *new_entry;
 	if (LOG_IGNORE(LOG_CALL((new_entry = stream_add_item(&entries->entries,
-							     struct_size)) ==
+							     alloc_size)) ==
 				NULL)))
-		return 0;
+		goto error;
 
 	*new_entry = (entry_t){
 		.type = flags == FTW_F ? et_reg : et_dir,
 		.permissions = s->st_mode,
 		.size = flags == FTW_F ? s->st_size : 0,
-		.path_size = path_size,
 	};
-	memcpy(new_entry->rel_path, relative_path, relative_path_size);
+
+	entry_data_t *data = align_entry_data(new_entry->data);
+
+	*data = (entry_data_t){ .path_size = rel_path_size,
+				.content_type_size = content_type_size };
+
+	memcpy(data->buf, relative_path, rel_path_size);
+	memcpy(data->buf + rel_path_size, content_type, content_type_size);
 
 	entries->total_file_size += new_entry->size;
+
+error:
+	g_object_unref(file_info);
+	g_object_unref(file);
 
 	return 0;
 }
@@ -121,13 +171,13 @@ int get_entry_handles(int parent_dir_fd, entry_t *entry,
 
 	*handles = (entry_handles_t){
 		.size = entry->size,
+		.fd = openat(parent_dir_fd, get_entry_rel_path(entry->data),
+			     open_flags, entry->permissions)
 	};
-	handles->fd = openat(parent_dir_fd, entry->rel_path, open_flags,
-			     entry->permissions);
 
 	if (handles->fd < 0) {
 		LOG_ERRORF(errno == EEXIST, EEXIST, "File `%s` exists",
-			   entry->rel_path);
+			   get_entry_rel_path(entry->data));
 
 		LOG_PERROR(errno != EEXIST, "openat");
 

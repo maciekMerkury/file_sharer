@@ -206,7 +206,7 @@ static int send_all_files(entries_t *fs, int soc)
 		if (LOG_CALL(get_entry_handles(fd, ne, &fdata, op_read) < 0))
 			return -1;
 
-		prog_bar_init(&p, ne->rel_path, ne->size,
+		prog_bar_init(&p, get_entry_rel_path(ne->data), ne->size,
 			      (struct timespec){ .tv_nsec = 500e3 });
 
 		if (LOG_CALL(perf_soc_op(soc, op_write, fdata.map, fdata.size,
@@ -230,31 +230,31 @@ static int client_main(in_port_t port, struct in_addr addr, char *file_path)
 	LOG_THROW(LOG_CALL(create_entries(file_path, &fs) < 0));
 
 	int server;
-	if (LOG_CALL(server_connect(&server, addr, port) != 0))
-		goto error;
+	int ret = 0;
+	if (LOG_CALL((ret = server_connect(&server, addr, port))) != 0)
+		goto cleanup;
 
 	if (LOG_CALL(send_metadata(server, &fs) != 0))
-		goto error;
+		goto cleanup;
 
 	size_info size = bytes_to_size(fs.total_file_size);
 	printf("sending %s, size %.2lf%s\n",
-	       ((entry_t *)fs.entries.data)->rel_path, size.size, unit(size));
+	       get_entry_rel_path((((entry_t *)fs.entries.data)->data)),
+	       size.size, unit(size));
 
 	if (LOG_CALL(send_all_files(&fs, server) < 0))
-		goto error;
+		goto cleanup;
 
-	destroy_entries(&fs);
-	return 0;
-
-error:
+cleanup:
 	if (server >= 0) {
 		shutdown(server, SHUT_RDWR);
 		close(server);
 	}
 
 	destroy_entries(&fs);
+	free(file_path);
 
-	return -1;
+	return ret;
 }
 
 int main(int argc, char **argv)
