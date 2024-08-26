@@ -38,6 +38,9 @@ peer_info_t *create_pinfo_message(header_t *header);
 request_data_t *create_request_message(const entries_t *restrict entries,
 				       header_t *restrict header);
 
+int send_stream(int soc, stream_t *restrict stream);
+int recv_stream(int soc, stream_t *restrict stream);
+
 int send_msg(int soc, header_t *h, void *data);
 /* data must be either NULL or ptr to malloced memory */
 int receive_msg(int soc, header_t *restrict h, void *restrict *data);

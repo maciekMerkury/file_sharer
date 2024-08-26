@@ -17,7 +17,6 @@
 #include "core.h"
 #include "entry.h"
 #include "log.h"
-#include "stream.h"
 
 #define MAX_FD 20
 

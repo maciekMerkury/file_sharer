@@ -1,13 +1,19 @@
+#include <assert.h>
 #include <bits/posix1_lim.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <poll.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <unistd.h>
 
-#include "core.h"
 #include "entry.h"
 #include "log.h"
 #include "message.h"
+#include "progress_bar.h"
 
 peer_info_t *create_pinfo_message(header_t *header)
 {
@@ -71,6 +77,73 @@ request_data_t *create_request_message(const entries_t *restrict entries,
 	return data;
 }
 
+#define SOCKET_OPERATION(op, ...) \
+	op == op_read ? recv(__VA_ARGS__) : send(__VA_ARGS__)
+
+ssize_t perf_soc_op(int soc, operation_type op, void *restrict buf, size_t len,
+		    progress_bar_t *const restrict prog_bar)
+{
+	int event = op_read ? POLLIN : POLLOUT;
+
+	ssize_t sent = 0;
+	int old_flags = 0;
+	struct pollfd p = {
+		.fd = soc,
+		.events = event,
+	};
+
+	if (prog_bar) {
+		old_flags = fcntl(soc, F_GETFL, 0);
+		if (fcntl(soc, F_SETFL, old_flags | O_NONBLOCK) < 0) {
+			perror("fcntl");
+			return -1;
+		}
+
+		assert(!(old_flags & O_NONBLOCK));
+		prog_bar_start(prog_bar);
+	}
+
+	ssize_t s;
+	while (sent < len) {
+		s = SOCKET_OPERATION(op, soc, (void *)((uintptr_t)buf + sent),
+				     len - sent, 0);
+		if (s < 0) {
+			if (errno != EWOULDBLOCK) {
+				perror("send");
+				sent = s;
+				break;
+			}
+		} else {
+			sent += s;
+		}
+
+		if (prog_bar) {
+			prog_bar_advance(prog_bar, sent);
+			int ret = poll(&p, 1, DEFAULT_POLL_TIMEOUT);
+			if (ret == 0) {
+				fprintf(stderr, "sending timed out\n");
+				sent = -1;
+				break;
+			} else if (ret < 0) {
+				perror("send_all poll");
+				sent = -1;
+				break;
+			}
+			assert(ret == 1);
+		}
+	}
+
+	if (prog_bar) {
+		if (fcntl(soc, F_SETFL, old_flags) < 0) {
+			perror("fcntl");
+			return -1;
+		}
+		prog_bar_finish(prog_bar);
+	}
+
+	return sent;
+}
+
 int send_msg(int soc, header_t *h, void *data)
 {
 	if (LOG_CALL(perf_soc_op(soc, op_write, h, sizeof(header_t), NULL) < 0))
@@ -98,6 +171,76 @@ int receive_msg(int soc, header_t *restrict h, void *restrict *data)
 
 error:
 	free(*data);
+
+	return -1;
+}
+
+struct stream_info {
+	size_t len;
+	size_t size;
+};
+
+int send_stream(int soc, stream_t *restrict stream)
+{
+	struct stream_info sinfo = {
+		.len = stream->metadata.len,
+		.size = stream->size,
+	};
+
+	if (LOG_CALL(perf_soc_op(soc, op_write, &sinfo,
+				 sizeof(struct stream_info), NULL) < 0))
+		return -1;
+
+	if (LOG_CALL(perf_soc_op(soc, op_write, stream->metadata.data,
+				 sinfo.len * sizeof(size_t), NULL) < 0))
+		return -1;
+
+	if (LOG_CALL(perf_soc_op(soc, op_write, stream->data, sinfo.size,
+				 NULL) < 0))
+		return -1;
+
+	return 0;
+}
+
+int recv_stream(int soc, stream_t *restrict stream)
+{
+	struct stream_info sinfo;
+
+	if (LOG_CALL(perf_soc_op(soc, op_read, &sinfo,
+				 sizeof(struct stream_info), NULL) < 0))
+		return -1;
+
+	*stream = (stream_t){
+		.metadata = {
+			.item_size = sizeof(size_t),
+			.cap = sinfo.len * sizeof(size_t),
+			.len = sinfo.len,
+			.data = malloc(sinfo.len * sizeof(size_t)),
+		},
+		.cap = sinfo.size,
+		.size = sinfo.size,
+		.data = malloc(sinfo.size),
+	};
+
+	if (LOG_PERROR(stream->metadata.data == NULL || stream->data == NULL,
+		       "malloc"))
+		goto error;
+
+	if (LOG_CALL(perf_soc_op(soc, op_read, stream->metadata.data,
+				 sinfo.len * sizeof(size_t), NULL) < 0))
+		goto error;
+
+	if (LOG_CALL(perf_soc_op(soc, op_read, stream->data, sinfo.size, NULL) <
+		     0))
+		goto error;
+
+	return 0;
+
+error:
+	free(stream->metadata.data);
+	free(stream->data);
+
+	*stream = (stream_t){ 0 };
 
 	return -1;
 }

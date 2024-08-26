@@ -2,7 +2,6 @@
 #include <sys/types.h>
 
 #include "core.h"
-#include "stream.h"
 
 typedef enum entry_type { et_reg, et_dir } entry_type;
 

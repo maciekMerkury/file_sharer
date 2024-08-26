@@ -8,8 +8,8 @@
 #include <string.h>
 #include <time.h>
 
+#include "core.h"
 #include "log.h"
-#include "stream.h"
 
 typedef struct stacktrace_entry {
 	int line;

@@ -1,3 +1,5 @@
+#pragma once
+
 int notifications_init(const char *name);
 void notifications_deinit(void);
 

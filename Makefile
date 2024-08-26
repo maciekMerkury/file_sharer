@@ -1,6 +1,6 @@
 CFLAGS=-std=gnu17 -Werror -Wall -Wno-trigraphs -Os $(shell pkg-config --cflags libnotify)
 DEBUG_CFLAGS=-fsanitize=address -fsanitize=undefined -g -Og -pedantic
-COMMON:=core.o progress_bar.o message.o entry.o stream.o notification.o log.o
+COMMON:=core.o progress_bar.o message.o entry.o notification.o log.o
 LDLIBS=-lm $(shell pkg-config --libs libnotify)
 CC:=gcc
 ALL_FILES :=$(wildcard *.[c|h])
