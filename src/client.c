@@ -199,7 +199,7 @@ static int send_all_files(entries_t *fs, int soc)
 
 	prog_bar_t p;
 
-	prog_bar_init(&p, &fs->entries, fs->total_file_size);
+	prog_bar_init(&p, pb_console, &fs->entries, fs->total_file_size);
 	while ((ne = stream_iter_next(&it))) {
 		prog_bar_next(&p);
 		if (ne->type == et_dir)

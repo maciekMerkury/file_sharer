@@ -17,6 +17,7 @@
 		0
 
 static GMainLoop *loop;
+static NotifyNotification *progress_notification;
 
 static void refuse_callback(NotifyNotification *n, const char *action,
 			    gpointer user_data)
@@ -70,7 +71,7 @@ int request_notification(const char body[], const char content_type[])
 {
 	int res = -1;
 
-	const char *icon = g_content_type_get_generic_icon_name(content_type);
+	char *icon = g_content_type_get_generic_icon_name(content_type);
 
 	NotifyNotification *n =
 		notify_notification_new("File Transfer Request", body, icon);
@@ -92,22 +93,56 @@ int request_notification(const char body[], const char content_type[])
 	if (LOG_GERROR(err, "failed to show notification"))
 		return -1;
 
+	g_free(icon);
 	g_main_loop_run(loop);
 	g_variant_unref(hint);
 
 	return res;
 }
 
+int transfer_in_progress_notification(const char body[], float perc)
+{
+	if (progress_notification == NULL) {
+		progress_notification = notify_notification_new(
+			"File Transfer In Progress", body, "network-receive");
+		notify_notification_set_category(progress_notification,
+						 "transfer");
+		GVariant *hint = g_variant_new_boolean(TRUE);
+		notify_notification_set_hint(progress_notification, "resident",
+					     hint);
+	} else
+		notify_notification_update(progress_notification,
+					   "File Transfer In Progress", body,
+					   "network-receive");
+
+	GVariant *hint = g_variant_new_int32((int)(perc * 100));
+	notify_notification_set_hint(progress_notification, "value", hint);
+
+	GError *err = NULL;
+	notify_notification_show(progress_notification, &err);
+	if (LOG_GERROR(err, "failed to show notification"))
+		return -1;
+
+	return 0;
+}
+
 int transfer_complete_notification(const char body[])
 {
-	NotifyNotification *n = notify_notification_new(
-		"File Transfer Complete", body, "network-receive");
+	NotifyNotification *n = progress_notification;
+	if (n == NULL)
+		n = notify_notification_new("File Transfer Complete", body,
+					    "network-receive");
+	else
+		notify_notification_update(n, "File Transfer Complete", body,
+					   "network-receive");
+
 	notify_notification_set_category(n, "transfer.complete");
 
 	GError *err = NULL;
 	notify_notification_show(n, &err);
 	if (LOG_GERROR(err, "failed to show notification"))
 		return -1;
+	n = NULL;
 
 	return 0;
 }

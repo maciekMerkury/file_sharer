@@ -278,7 +278,7 @@ void recv_data(client_t *client, char path[PATH_MAX])
 	bool error = false;
 
 	prog_bar_t bar;
-	prog_bar_init(&bar, &client->entries, client->total_size);
+	prog_bar_init(&bar, pb_notification, &client->entries, client->total_size);
 	while ((entry = stream_iter_next(&it))) {
 		prog_bar_next(&bar);
 		const char *path = get_entry_rel_path(entry->data);

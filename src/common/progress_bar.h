@@ -1,4 +1,5 @@
 #pragma once
+
 #include <sys/types.h>
 
 #include "core.h"
@@ -11,7 +12,11 @@ typedef struct size_info {
 size_info bytes_to_size(size_t size);
 const char *const unit(size_info info);
 
+typedef enum prog_bar_type { pb_console, pb_notification } prog_bar_type;
+
 typedef struct prog_bar {
+	prog_bar_type type;
+
 	stream_t *entries;
 	size_t max_val;
 	stream_iter_t it;
@@ -24,6 +29,7 @@ typedef struct prog_bar {
 	size_t val;
 } prog_bar_t;
 
-void prog_bar_init(prog_bar_t *bar, stream_t *entries, size_t max_val);
+void prog_bar_init(prog_bar_t *bar, prog_bar_type type, stream_t *entries,
+		   size_t max_val);
 void prog_bar_next(prog_bar_t *bar);
 void prog_bar_advance(prog_bar_t *bar, size_t step);

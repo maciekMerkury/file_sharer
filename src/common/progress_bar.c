@@ -10,6 +10,7 @@
 
 #include "core.h"
 #include "entry.h"
+#include "notification.h"
 #include "progress_bar.h"
 
 #define UNIT_LEN 4
@@ -36,9 +37,12 @@ const char *const unit(size_info info)
 	return (info.unit_idx < UNIT_LEN) ? size_units[info.unit_idx] : NULL;
 }
 
-void prog_bar_init(prog_bar_t *bar, stream_t *entries, size_t max_val)
+void prog_bar_init(prog_bar_t *bar, prog_bar_type type, stream_t *entries,
+		   size_t max_val)
 {
-	*bar = (prog_bar_t){ .entries = entries, .max_val = max_val };
+	*bar = (prog_bar_t){ .entries = entries,
+			     .type = type,
+			     .max_val = max_val };
 	stream_iter_init(&bar->it, entries);
 }
 
@@ -104,6 +108,20 @@ void print_bar(const char title[], size_t size, size_t speed, float perc)
 	printf(" %3.0f%%\n", perc * 100);
 }
 
+void show_bar(const char filename[], float perc)
+{
+	const static int max_title_len = 30;
+	const int title_len = strlen(filename);
+	const char *tl = title_len < max_title_len ?
+				 filename :
+				 filename + title_len - max_title_len;
+
+	char title[64];
+	snprintf(title, 64, "Receiving: %s", tl);
+
+	transfer_in_progress_notification(title, perc);
+}
+
 void prog_bar_next(prog_bar_t *bar)
 {
 	bar->curr = stream_iter_next(&bar->it);
@@ -146,16 +164,20 @@ void prog_bar_advance(prog_bar_t *bar, size_t step)
 				      ts.tv_nsec - bar->start_ts.tv_nsec,
 				      bar->total_val);
 
-	printf("\x1B[A");
-	if (bar->val != step)
+	if (bar->type == pb_console) {
 		printf("\x1B[A");
+		if (bar->val != step)
+			printf("\x1B[A");
 
-	print_bar(get_entry_rel_path(entry->data), entry->size, speed,
-		  (float)bar->val / entry->size);
+		print_bar(get_entry_rel_path(entry->data), entry->size, speed,
+			  (float)bar->val / entry->size);
 
-	char total_title[64];
-	sprintf(total_title, "Total(%ld/%ld)", bar->it.i,
-		bar->entries->metadata.len);
-	print_bar(total_title, bar->max_val, total_speed,
-		  (float)bar->total_val / bar->max_val);
+		char total_title[64];
+		sprintf(total_title, "Total(%ld/%ld)", bar->it.i,
+			bar->entries->metadata.len);
+		print_bar(total_title, bar->max_val, total_speed,
+			  (float)bar->total_val / bar->max_val);
+	} else
+		show_bar(get_entry_rel_path(entry->data),
+			 (float)bar->total_val / bar->max_val);
 }
