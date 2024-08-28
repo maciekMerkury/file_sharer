@@ -81,7 +81,7 @@ request_data_t *create_request_message(const entries_t *restrict entries,
 	op == op_read ? recv(__VA_ARGS__) : send(__VA_ARGS__)
 
 ssize_t perf_soc_op(int soc, operation_type op, void *restrict buf, size_t len,
-		    progress_bar_t *const restrict prog_bar)
+		    prog_bar_t *const restrict prog_bar)
 {
 	int event = op_read ? POLLIN : POLLOUT;
 
@@ -94,54 +94,46 @@ ssize_t perf_soc_op(int soc, operation_type op, void *restrict buf, size_t len,
 
 	if (prog_bar) {
 		old_flags = fcntl(soc, F_GETFL, 0);
-		if (fcntl(soc, F_SETFL, old_flags | O_NONBLOCK) < 0) {
-			perror("fcntl");
+		if (LOG_PERROR(fcntl(soc, F_SETFL, old_flags | O_NONBLOCK) < 0,
+			       "fcntl"))
 			return -1;
-		}
-
-		assert(!(old_flags & O_NONBLOCK));
-		prog_bar_start(prog_bar);
 	}
 
 	ssize_t s;
 	while (sent < len) {
+		if (prog_bar) {
+			int ret = poll(&p, 1, DEFAULT_POLL_TIMEOUT);
+			if (LOG_ERROR(ret == 0, ETIMEDOUT, "sending timed out"))
+				goto error;
+			if (LOG_PERROR(ret < 0, "poll"))
+				goto error;
+		}
 		s = SOCKET_OPERATION(op, soc, (void *)((uintptr_t)buf + sent),
 				     len - sent, 0);
-		if (s < 0) {
-			if (errno != EWOULDBLOCK) {
-				perror("send");
-				sent = s;
-				break;
-			}
-		} else {
-			sent += s;
-		}
 
-		if (prog_bar) {
-			prog_bar_advance(prog_bar, sent);
-			int ret = poll(&p, 1, DEFAULT_POLL_TIMEOUT);
-			if (ret == 0) {
-				fprintf(stderr, "sending timed out\n");
-				sent = -1;
-				break;
-			} else if (ret < 0) {
-				perror("send_all poll");
-				sent = -1;
-				break;
-			}
-			assert(ret == 1);
-		}
+		if (s < 0 && errno == EWOULDBLOCK)
+			continue;
+
+		if (LOG_PERROR(s < 0 && errno != EWOULDBLOCK, "soc op"))
+			goto error;
+
+		sent += s;
+
+		if (prog_bar)
+			prog_bar_advance(prog_bar, s);
 	}
 
-	if (prog_bar) {
-		if (fcntl(soc, F_SETFL, old_flags) < 0) {
-			perror("fcntl");
+	if (prog_bar)
+		if (LOG_PERROR(fcntl(soc, F_SETFL, old_flags) < 0, "fcntl"))
 			return -1;
-		}
-		prog_bar_finish(prog_bar);
-	}
 
 	return sent;
+
+error:
+	if (prog_bar)
+		if (LOG_PERROR(fcntl(soc, F_SETFL, old_flags) < 0, "fcntl"))
+			return -1;
+	return -1;
 }
 
 int send_msg(int soc, header_t *h, void *data)

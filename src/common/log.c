@@ -267,6 +267,9 @@ void log_ignore(int line, const char *file, const char *func)
 	log->chains[log->curr].last = (stacktrace_entry_t){ line, file, func };
 	time_t t = time(NULL);
 	struct tm *now = localtime(&t);
+	assert(now->tm_year > 0 && now->tm_year < 10000 - 1900);
+	assert(now->tm_mon >= 0 && now->tm_mon <= 11);
+
 	snprintf(log->chains[log->curr].datetime, DATETIME_SIZE,
 		 "%04d-%02d-%02d %02d:%02d:%02d", now->tm_year + 1900,
 		 now->tm_mon + 1, now->tm_mday, now->tm_hour, now->tm_min,

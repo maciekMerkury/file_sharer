@@ -11,21 +11,19 @@ typedef struct size_info {
 size_info bytes_to_size(size_t size);
 const char *const unit(size_info info);
 
-typedef struct progress_bar {
-	const char *title;
-	size_t title_len;
+typedef struct prog_bar {
+	stream_t *entries;
 	size_t max_val;
-	struct timespec minimum_dt;
+	stream_iter_t it;
+	void *curr;
 
-	size_t last_val;
-	struct timespec prev_ts;
-} progress_bar_t;
+	struct timespec start_ts;
+	size_t total_val;
 
-void prog_bar_init(progress_bar_t *bar, const char *const title,
-		   const size_t max, const struct timespec minimum_dt);
-int prog_bar_start(progress_bar_t *prog);
-int prog_bar_advance(progress_bar_t *prog, const size_t curr_val);
-int prog_bar_finish(progress_bar_t *bar);
+	struct timespec ts;
+	size_t val;
+} prog_bar_t;
 
-ssize_t perf_soc_op(int soc, operation_type op, void *restrict buf, size_t len,
-		    progress_bar_t *const restrict prog_bar);
+void prog_bar_init(prog_bar_t *bar, stream_t *entries, size_t max_val);
+void prog_bar_next(prog_bar_t *bar);
+void prog_bar_advance(prog_bar_t *bar, size_t step);

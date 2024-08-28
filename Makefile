@@ -1,6 +1,6 @@
 CC:=gcc
 CFLAGS=-std=gnu17 -Werror -Wall -Wno-trigraphs -Os $(shell pkg-config --cflags libnotify)
-LDLIBS=-lm $(shell pkg-config --libs libnotify)
+LDLIBS= $(shell pkg-config --libs libnotify)
 DEBUG_CFLAGS=-fsanitize=address -fsanitize=undefined -g -Og -pedantic
 MAKEFLAGS += --jobs=$(shell nproc)
 
@@ -8,7 +8,8 @@ SRC_DIR := src
 COMMON_DIR := $(SRC_DIR)/common
 OBJ_DIR := obj
 
-SRC :=$(wildcard $(SRC_DIR)/**/*.[c|h])
+SRC := $(wildcard $(SRC_DIR)/**/*.[c|h])
+COMMON_HDRS := $(wildcard $(COMMON_DIR)/*.h)
 COMMON_SRC := $(wildcard $(COMMON_DIR)/*.c)
 COMMON_OBJ := $(COMMON_SRC:$(COMMON_DIR)/%.c=$(OBJ_DIR)/%.o)
 
@@ -30,7 +31,7 @@ format:
 $(OBJ_DIR):
 	mkdir -p $@
 
-$(OBJ_DIR)/%.o: $(COMMON_DIR)/%.c | $(OBJ_DIR)
+$(OBJ_DIR)/%.o: $(COMMON_DIR)/%.c $(COMMON_HDRS) | $(OBJ_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)

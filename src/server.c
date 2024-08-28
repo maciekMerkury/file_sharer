@@ -94,6 +94,7 @@ typedef struct client {
 	char addr_str[INET_ADDRSTRLEN];
 	peer_info_t *info;
 	stream_t entries;
+	off_t total_size;
 } client_t;
 
 #define TIMEOUT 1000
@@ -220,6 +221,7 @@ int confirm_transfer(client_t *client, char path[PATH_MAX])
 		 get_entry_type_name(request->entry_type),
 		 get_entry_rel_path(request->entry_data), size.size,
 		 unit(size));
+	client->total_size = request->total_file_size;
 
 	int ret;
 	LOG_CALL(ret = request_notification(
@@ -271,16 +273,14 @@ void recv_data(client_t *client, char path[PATH_MAX])
 	entry_handles_t entry_handles;
 
 	int root_dir_fd;
-	if (LOG_PERROR((root_dir_fd = open(path, O_DIRECTORY)), "open") < 0)
-		return;
+	LOG_THROW(LOG_PERROR((root_dir_fd = open(path, O_DIRECTORY)) < 0, "open"));
 
 	bool error = false;
 
-	const char *title_format = "Receiving %s";
-	char title[PATH_MAX + 10];
-	struct timespec ts = { 0, 1e8 };
-	progress_bar_t bar;
+	prog_bar_t bar;
+	prog_bar_init(&bar, &client->entries, client->total_size);
 	while ((entry = stream_iter_next(&it))) {
+		prog_bar_next(&bar);
 		const char *path = get_entry_rel_path(entry->data);
 		if (entry->type == et_dir) {
 			int ret =
@@ -311,22 +311,17 @@ pretend:
 				       "ftruncate"))
 				goto pretend;
 		}
-		snprintf(title, sizeof(title), title_format, path);
-		prog_bar_init(&bar, title, entry_handles.size, ts);
 
-		if (LOG_IGNORE(perf_soc_op(client->socket, op_read,
-					   entry_handles.map,
-					   entry_handles.size, &bar) < 0))
-			goto error;
+		LOG_THROW(LOG_CALL(perf_soc_op(client->socket, op_read,
+					       entry_handles.map,
+					       entry_handles.size, &bar) < 0));
 
-		if (!pretend)
-			received_files++;
-
-error:
 		if (pretend)
 			free(entry_handles.map);
-		else
+		else {
+			received_files++;
 			close_entry_handles(&entry_handles);
+		}
 	}
 
 	close(root_dir_fd);
@@ -388,8 +383,6 @@ void *handle_client(void *arg)
 	LOG_CALLV(recv_data(client, client->download_dir));
 
 	logger_remove_thread(1);
-
-	return NULL;
 
 error:
 	cleanup_client(client);

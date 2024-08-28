@@ -4,6 +4,7 @@
 #include <sys/types.h>
 
 #include "entry.h"
+#include "progress_bar.h"
 
 typedef enum __attribute__((__packed__)) message_type {
 	mt_pinfo,
@@ -40,6 +41,9 @@ request_data_t *create_request_message(const entries_t *restrict entries,
 
 int send_stream(int soc, stream_t *restrict stream);
 int recv_stream(int soc, stream_t *restrict stream);
+
+ssize_t perf_soc_op(int soc, operation_type op, void *restrict buf, size_t len,
+		    prog_bar_t *const restrict prog_bar);
 
 int send_msg(int soc, header_t *h, void *data);
 /* data must be either NULL or ptr to malloced memory */

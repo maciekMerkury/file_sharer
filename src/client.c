@@ -197,17 +197,16 @@ static int send_all_files(entries_t *fs, int soc)
 	entry_t *ne;
 	entry_handles_t fdata;
 
-	progress_bar_t p;
+	prog_bar_t p;
 
+	prog_bar_init(&p, &fs->entries, fs->total_file_size);
 	while ((ne = stream_iter_next(&it))) {
+		prog_bar_next(&p);
 		if (ne->type == et_dir)
 			continue;
 
 		if (LOG_CALL(get_entry_handles(fd, ne, &fdata, op_read) < 0))
 			return -1;
-
-		prog_bar_init(&p, get_entry_rel_path(ne->data), ne->size,
-			      (struct timespec){ .tv_nsec = 500e3 });
 
 		if (LOG_CALL(perf_soc_op(soc, op_write, fdata.map, fdata.size,
 					 &p) < 0))
@@ -229,7 +228,7 @@ static int client_main(in_port_t port, struct in_addr addr, char *file_path)
 	entries_t fs;
 	LOG_THROW(LOG_CALL(create_entries(file_path, &fs) < 0));
 
-	int server;
+	int server = -1;
 	int ret = 0;
 	if (LOG_CALL((ret = server_connect(&server, addr, port))) != 0)
 		goto cleanup;
